@@ -11,3 +11,15 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
+#include "base_batch_sampler.h"
+
+int BaseBatchSampler::BatchSize() const { return batch_size_; }
+
+absl::Status BaseBatchSampler::SetBatchSize(int batch_size) {
+  if (batch_size <= 0) {
+    return absl::InvalidArgumentError("Batch size must be greater than 0");
+  }
+  batch_size_ = batch_size;
+  return absl::OkStatus();
+}

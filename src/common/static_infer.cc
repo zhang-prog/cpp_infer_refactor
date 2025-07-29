@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "include/common/static_infer.h"
+#include "static_infer.h"
 
-#include "absl/status/statusor.h"
+#include "src/utils/utility.h"
 
 PaddleInfer::PaddleInfer(const std::string &model_name,
                          const std::string &model_dir,
@@ -43,130 +43,147 @@ PaddleInfer::PaddleInfer(const std::string &model_name,
   }
 }
 
-absl::StatusOr<std::unique_ptr<paddle_infer::Predictor>> Create() {
-  auto model_paths = get_model_paths(model_dir_, model_file_prefix_);
+absl::StatusOr<std::shared_ptr<paddle_infer::Predictor>> PaddleInfer::Create() {
+  auto model_paths = Utility::GetModelPaths(model_dir_, model_file_prefix_);
   if (!model_paths.ok()) {
     return model_paths.status();
   }
-  if (model_paths.find("paddle") == model_paths.end()) {
+  if (model_paths->find("paddle") == model_paths->end()) {
     return absl::NotFoundError("No valid PaddlePaddle model found");
   }
 
   auto result = CheckRunMode();
   if (!result.ok()) {
-    return result.status();
+    return result;
   }
 
-  auto model_files = model_paths["paddle"];
+  auto model_files = (*model_paths)["paddle"];
   std::string model_file = model_files.first;
   std::string params_file = model_files.second;
 
-  if (option_.device_type == "cpu" && option_.device_id != nullptr) {
-    option_.device_id = nullptr;
+  if (option_.DeviceType() == "cpu" && option_.DeviceId() >= 0) {
+    auto result_device_id = option_.SetDeviceIdCpu(-1);  //*********F
+    if (!result_device_id.ok()) {
+      return result_device_id;
+    }
     std::cout << "`device_id` has been set to nullptr" << std::endl;
   }
 
-  if (option_.device_type == "gpu" && option_.device_id == nullptr) {
-    option_.device_id = 0;
+  if (option_.DeviceType() == "gpu" && option_.DeviceId() < 0) {
+    auto result_device_id = option_.SetDeviceId(0);
+    if (!result_device_id.ok()) {
+      return result_device_id;
+    }
     std::cout << "`device_id` has been set to 0" << std::endl;
   }
 
   paddle_infer::Config config;
   config.SetModel(model_file, params_file);
 
-  if (option_.device_type == "gpu") {
+  if (option_.DeviceType() == "gpu") {
     std::unordered_set<std::string> mixed_op_set = {"feed", "fetch"};
-    config.ExpDisableMixPrecisionOps(mixed_op_set);
+    config.Exp_DisableMixedPrecisionOps(mixed_op_set);
 
     paddle_infer::PrecisionType precision =
         paddle_infer::PrecisionType::kFloat32;
-    if (option_.run_mode == "paddle_fp16") {
+    if (option_.RunMode() == "paddle_fp16") {
       precision = paddle_infer::PrecisionType::kHalf;
     }
 
     config.DisableMKLDNN();
-    config.EnableUseGpu(100, option_.device_id, precision);
-    config.EnableNewIR(option_.enable_new_ir);
-    if (option_.enable_new_ir && option_.enable_cinn) {
+    config.EnableUseGpu(100, option_.DeviceId(), precision);
+    config.EnableNewIR(option_.EnableNewIR());
+    if (option_.EnableNewIR() && option_.EnableCinn()) {
       config.EnableCINN();
     }
     config.EnableNewExecutor();
     config.SetOptimizationLevel(3);
-  } else if (option_.device_type == "cpu") {
+  } else if (option_.DeviceType() == "cpu") {
     config.DisableGpu();
-    if (option_.run_mode.find("mkldnn") != std::string::npos) {
-      config.EnableMkldnn();
-      if (option_.run_mode.find("bf16") != std::string::npos) {
+    if (option_.RunMode().find("mkldnn") != std::string::npos) {
+      config.EnableMKLDNN();
+      if (option_.RunMode().find("bf16") != std::string::npos) {
         config.EnableMkldnnBfloat16();
       }
-      config.SetMkldnnCacheCapacity(option_.mkldnn_cache_capacity);
+      config.SetMkldnnCacheCapacity(option_.MkldnnCacheCapacity());
     } else {
       config.DisableMKLDNN();
     }
-    config.SetCpuMathLibraryNumThreads(option_.cpu_threads);
-    config.EnableNewIr(option_.enable_new_ir);
+    config.SetCpuMathLibraryNumThreads(option_.CpuThreads());
+    config.EnableNewIR(option_.EnableNewIR());
     config.EnableNewExecutor();
     config.SetOptimizationLevel(3);
   } else {
     return absl::InvalidArgumentError("Not supported device type: " +
-                                      option_.device_type);
+                                      option_.DeviceType());
   }
 
   config.EnableMemoryOptim();
-  for (const auto &del_p : option_.delete_pass) {
+  for (const auto &del_p : option_.DeletePass()) {
     config.DeletePass(del_p);
   }
   config.DisableGlogInfo();
 
-  auto predictor = paddle_infer::CreatePredictor(config);
+  auto predictor_shared = paddle_infer::CreatePredictor(config);
 
-  return predictor;
-}
+  return predictor_shared;
+};
 
-absl::StatusOr < std::vector<std::vector<float>> PaddleInfer::Apply(
-                     const std::vector<cv::Mat> &x) {
+absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
+    const std::vector<cv::Mat> &x) {
   for (size_t i = 0; i < x.size(); ++i) {
     auto &input_handle = input_handles_[i];
-    input_handle->Reshape({static_cast<int>(x[i].size())});
-    input_handle->CopyFromCpu(x[i].data());
+    std::vector<int> input_shape = {x[0].size[0], x[0].size[1], x[0].size[2],
+                                    x[0].size[3]};
+    input_handle->Reshape(input_shape);
+    input_handle->CopyFromCpu<float>((float *)x[i].data);
   }
   predictor_->Run();
 
   std::vector<std::vector<float>> outputs;
+  std::vector<int> output_shape = {};
   for (auto &output_handle : output_handles_) {
-    std::vector<int> shape = output_handle->shape();
+    output_shape = output_handle->shape();
     size_t numel = 1;
-    for (auto dim : shape) numel *= dim;
+    for (auto dim : output_shape) numel *= dim;
     std::vector<float> out_data(numel);
     output_handle->CopyToCpu(out_data.data());
     outputs.push_back(std::move(out_data));
   }
-
-  return outputs;
-}
+  cv::Mat pred(output_shape.size(), output_shape.data(), CV_32F);
+  memcpy(pred.ptr<float>(), outputs[0].data(),
+         outputs[0].size() * sizeof(float));
+  std::vector<cv::Mat> pred_outputs = {pred};
+  return pred_outputs;
+};
 
 absl::Status PaddleInfer::CheckRunMode() {
-  // if (
-  //     !DISABLE_MKLDNN_MODEL_BL &&
-  //     option_.run_mode.rfind("mkldnn", 0) == 0 &&
-  //     MKLDNN_BLOCKLIST.count(model_name_) > 0 &&
-  //     option_.device_type == "cpu"
-  // ) {
-  //     std::cout << "The model(" << model_name_ << ") is not supported to run
-  //     in MKLDNN mode! Using `paddle` instead!" << std::endl; option_.run_mode
-  //     = "paddle";
-  // }
-
-  // // check available for model
-  // if (_model_name == "LaTeX_OCR_rec" && option_.device_type == "cpu") {
-  //     std::string vendor_id_raw = get_cpu_vendor();
-  //     if (vendor_id_raw.find("GenuineIntel") != std::string::npos &&
-  //     option_.run_mode != "mkldnn") {
-  //         std::cout << "Now, the `LaTeX_OCR_rec` model only support `mkldnn`
-  //         mode when running on Intel CPU devices. So using `mkldnn` instead."
-  //         << std::endl; option_.run_mode = "mkldnn";
-  //     }
-  // }
+  if (option_.RunMode().rfind("mkldnn", 0) == 0 &&
+      Utility::MKLDNN_BLOCKLIST.count(model_name_) > 0 &&
+      option_.DeviceType() == "cpu") {
+    std::cout << "The model(" + model_name_ +
+                     ") is not supported to run in MKLDNN mode! Using `paddle` "
+                     "instead!"
+              << std::endl;  //******
+    auto result = option_.SetRunMode("paddle");
+    if (!result.ok()) {
+      return result;
+    }
+  }
+  if (model_name_ == "LaTeX_OCR_rec" && option_.DeviceType() == "cpu") {
+    std::string vendor_id_raw = Utility::GetCpuVendor();
+    if (vendor_id_raw.find("GenuineIntel") != std::string::npos &&
+        option_.RunMode() != "mkldnn") {
+      std::cout
+          << "Now, the `LaTeX_OCR_rec` model only support `mkldnn` mode when "
+             "running on Intel CPU devices. So using `mkldnn` instead."
+          << std::endl;
+      auto result = option_.SetRunMode("mkldnn");
+      if (!result.ok()) {
+        return result;
+      }
+    }
+  }
 
   return absl::OkStatus();
-}
+};
