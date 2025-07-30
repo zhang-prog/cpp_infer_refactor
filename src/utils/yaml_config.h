@@ -22,15 +22,15 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "utility.h"
 
 class YamlConfig {
  public:
   YamlConfig(const std::unordered_map<std::string, std::string>& data)
       : data_(data) {}
-  YamlConfig(const std::string& file_name);
+  YamlConfig(const std::string& model_dir);
   ~YamlConfig() = default;
 
-  absl::Status LoadFile(const std::string& file_name);
   void Init();
   std::unordered_map<std::string, std::string> PreProcessOpInfo() {
     return pre_process_op_info_;
@@ -49,9 +49,13 @@ class YamlConfig {
   absl::Status PrintWithPrefix(const std::string& prefix) const;
   absl::Status FindPreProcessOp(
       const std::string& prefix = "PreProcess.transform_ops[0]") const;
-  std::unordered_map<std::string, std::string> Data() { return data_; }
+  std::unordered_map<std::string, std::string> Data() { return data_; };
+  std::string ConfigYamlPath() { return config_yaml_path_; };
+  absl::Status GetConfigYamlPaths(const std::string& model_dir);
+  absl::Status LoadYamlFile();
 
  private:
+  std::string config_yaml_path_;
   void ParseNode(const YAML::Node& node, const std::string& prefix = "");
   std::unordered_map<std::string, std::string> data_;
   std::unordered_map<std::string, std::string> pre_process_op_info_;

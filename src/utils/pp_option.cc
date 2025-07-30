@@ -70,7 +70,7 @@ absl::Status PaddlePredictorOption::SetDeviceType(
   }
   device_type_ = device_type;
   if (device_type_ == "cpu") {
-    device_id_ = -1;  // **************
+    device_id_ = 0;
   }
   return absl::OkStatus();
 }
@@ -79,14 +79,6 @@ absl::Status PaddlePredictorOption::SetDeviceId(int device_id) {
   if (device_id < 0) {
     return absl::InvalidArgumentError(
         "SetDeviceId failed! device_id must be >= 0");
-  }
-  device_id_ = device_id;
-  return absl::OkStatus();
-}
-absl::Status PaddlePredictorOption::SetDeviceIdCpu(int device_id) {
-  if (device_id != -1) {
-    return absl::InvalidArgumentError(
-        "SetDeviceIdCpu failed! device_id must be == -1");
   }
   device_id_ = device_id;
   return absl::OkStatus();

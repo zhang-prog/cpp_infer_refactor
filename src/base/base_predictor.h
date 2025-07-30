@@ -31,37 +31,47 @@
 
 class BasePredictor {
  public:
-  BasePredictor(
-      const std::string &model_dir, const std::string &device = "cpu",
-      const bool enable_mkldnn = false, int batch_size = 1,
-      const std::unordered_map<std::string, std::string> &config = {});
+  BasePredictor(const std::string &model_dir, const std::string &device = "cpu",
+                const bool enable_mkldnn = false, int batch_size = 1,
+                const std::unordered_map<std::string, std::string> &config = {},
+                const std::string sample_type = "");
   virtual ~BasePredictor() = default;
   std::vector<std::unique_ptr<BaseCVResult>> Predict(const std::string &input);
-  absl::Status LoadConfig(const std::string &config_path);
   std::unique_ptr<PaddleInfer> CreateStaticInfer();
 
   const PaddlePredictorOption &PPOption();
-  absl::StatusOr<std::string> GetModelName();
-  std::string ConfigPath();
+  absl::StatusOr<std::string> ModelName() { return model_name_; };
+  std::string ConfigPath() { return config_.ConfigYamlPath(); };
 
   void SetBatchSize(int batch_size);
 
   virtual std::vector<std::unique_ptr<BaseCVResult>> Process(
       std::vector<cv::Mat> &batch_data) = 0;
-  virtual std::unique_ptr<BaseBatchSampler> BuildBatchSampler() = 0;
-  virtual std::unique_ptr<BaseCVResult> GetResultClass() = 0;
+  absl::Status BuildBatchSampler();
+  //   virtual std::unique_ptr<BaseCVResult> GetResultClass() = 0;
+
+  template <typename T, typename... Args>
+  void Register(const std::string &key, Args &&...args);
+
   static constexpr const char *MODEL_FILE_PREFIX = "inference";
+  static const std::unordered_set<std::string> SAMPLER_TYPE;
 
  protected:
   std::string model_dir_;
-  // std::unordered_map<std::string, std::string> config_;
   YamlConfig config_;
   int batch_size_;
-  // std::unique_ptr<FuncRegister> func_register_ptr_;
   std::unique_ptr<BaseBatchSampler> batch_sampler_ptr_;
-  // std::unique_ptr<BaseCVResult> result_class_ptr_; //*********
   std::unique_ptr<PaddlePredictorOption> pp_option_ptr_;
   std::string input_path_;  //************
+  std::string model_name_;
+  std::string sampler_type_;
+  std::unordered_map<std::string, std::unique_ptr<BaseProcessor>> pre_op_;
+};
+
+template <typename T, typename... Args>
+void BasePredictor::Register(const std::string &key, Args &&...args) {
+  auto instance = std::unique_ptr<T>(new T(std::forward<Args>(args)...));
+  pre_op_[key] = std::move(instance);
 };
 
 #endif  // BASE_PREDICTOR_H_

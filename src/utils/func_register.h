@@ -32,24 +32,4 @@ class BaseProcessor {
       std::vector<cv::Mat>& input, const void* param_ptr = nullptr) const = 0;
 };
 
-// class FuncRegister {  //感觉没必要用他了 ，是不是可以删除注册类文件
-//  public:
-//   FuncRegister(std::unordered_map<std::string,
-//   std::unique_ptr<BaseProcessor>>& register_map) :
-//   register_map_(register_map){}; template <typename T, typename... Args> void
-//   Register(const std::string &key, Args &&...args);
-
-//   std::unique_ptr<BaseProcessor> Apply(const std::string &key);
-
-//  private:
-//   std::unordered_map<std::string, std::unique_ptr<BaseProcessor>>
-//   register_map_;
-// };
-
-// template <typename T, typename... Args>
-// void FuncRegister::Register(const std::string &key, Args &&...args) {
-//   auto instance = std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-//   register_map_[key] = std::move(instance);
-// };
-
 #endif  // FUNC_REGISTER_H_

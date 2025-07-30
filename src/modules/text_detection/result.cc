@@ -22,7 +22,17 @@
 
 using json = nlohmann::json;
 void TextDetResult::SaveToImg(const std::string& save_path) const {
-  std::string file_name = "output_image.png";
+  auto file_path = predictor_result_.input_path;
+  size_t pos = file_path.find_last_of("/\\");
+  std::string file_name =
+      (pos == std::string::npos) ? file_path : file_path.substr(pos + 1);
+  size_t dot_pos = file_name.find_last_of('.');
+  if (dot_pos == std::string::npos) {
+    file_name = file_name + "_res";
+  } else {
+    file_name.insert(dot_pos, "_res");
+  }
+  file_name = "gsj.jpg";
   std::string full_path = save_path;
   if (save_path.back() != '/' && save_path.back() != '\\') {
     full_path += '/';
@@ -33,9 +43,9 @@ void TextDetResult::SaveToImg(const std::string& save_path) const {
     std::cerr << result.ToString();
   }
 
-  cv::Mat img = predictor_result_.input_image.at("input_image").clone();
+  cv::Mat img = predictor_result_.input_image.clone();
 
-  const auto& dt_polys = predictor_result_.dt_polys.at("dt_polys");
+  const auto& dt_polys = predictor_result_.dt_polys;
   for (const auto& poly : dt_polys) {
     std::vector<cv::Point> pts;
     for (const auto& pt : poly) {
@@ -44,8 +54,7 @@ void TextDetResult::SaveToImg(const std::string& save_path) const {
 
     const cv::Point* pts_ptr = pts.data();
     int npts = pts.size();
-    cv::polylines(img, &pts_ptr, &npts, 1, true, cv::Scalar(0, 0, 255),
-                  2);  // 绿色框, 宽度2
+    cv::polylines(img, &pts_ptr, &npts, 1, true, cv::Scalar(0, 0, 255), 2);
   }
 
   // 保存
@@ -59,41 +68,31 @@ void TextDetResult::SaveToImg(const std::string& save_path) const {
 void TextDetResult::Print() const {
   std::cout << "{\n  \"res\": {" << std::endl;
 
-  // Print input_path
-  std::cout << "    \"input_path\": {" << std::endl;
-  for (const auto& pair : predictor_result_.input_path) {
-    std::cout << "      \"" << pair.first << "\": \"" << pair.second << "\","
-              << std::endl;
-  }
-  std::cout << "    }," << std::endl;
+  std::cout << "    \"input_path\": {" << predictor_result_.input_path
+            << "    }," << std::endl;
 
-  // Print dt_polys
   std::cout << "    \"dt_polys\": [" << std::endl;
-  for (const auto& pair : predictor_result_.dt_polys) {
-    std::cout << "      {\"" << pair.first << "\": [" << std::endl;
-    for (const auto& polygon : pair.second) {
-      std::cout << "        [";
-      for (size_t i = 0; i < polygon.size(); ++i) {
-        std::cout << "[" << static_cast<int>(polygon[i].x) << ", "
-                  << static_cast<int>(polygon[i].y) << "]";
-        if (i < polygon.size() - 1) std::cout << ", ";
-      }
-      std::cout << "]," << std::endl;
+  for (const auto& polygon : predictor_result_.dt_polys) {
+    std::cout << "        [";
+    for (size_t i = 0; i < polygon.size(); ++i) {
+      std::cout << "[" << static_cast<int>(polygon[i].x) << ", "
+                << static_cast<int>(polygon[i].y) << "]";
+      if (i < polygon.size() - 1) std::cout << ", ";
     }
+    std::cout << "]," << std::endl;
     std::cout << "      ]}," << std::endl;
   }
   std::cout << "    ]," << std::endl;
 
   // Print dt_scores
   std::cout << "    \"dt_scores\": [" << std::endl;
-  for (const auto& pair : predictor_result_.dt_scores) {
-    std::cout << "      {\"" << pair.first << "\": [";
-    for (size_t i = 0; i < pair.second.size(); ++i) {
-      std::cout << pair.second[i];
-      if (i < pair.second.size() - 1) std::cout << ", ";
-    }
-    std::cout << "]}" << std::endl;
+  for (auto it = predictor_result_.dt_scores.begin();
+       it != predictor_result_.dt_scores.end(); ++it) {
+    std::cout << *it;
+    if (it < predictor_result_.dt_scores.end() - 1) std::cout << ", ";
   }
+  std::cout << "]}" << std::endl;
+
   std::cout << "    ]" << std::endl;
 
   std::cout << "  }\n}" << std::endl;
@@ -102,32 +101,26 @@ void TextDetResult::Print() const {
 void TextDetResult::SaveToJson(const std::string& save_path) const {
   nlohmann::ordered_json j;
 
-  for (const auto& pair : predictor_result_.input_path) {
-    j[pair.first] = pair.second;
-  }
-  j["page_index"] = nullptr;  //********
-  for (const auto& pair : predictor_result_.dt_polys) {
-    json polys_json = json::array();
-    for (const auto& polygon : pair.second) {
-      json poly_json = json::array();
-      for (const auto& point : polygon) {
-        poly_json.push_back(
-            {static_cast<int>(point.x), static_cast<int>(point.y)});
-      }
-      polys_json.push_back(poly_json);
-    }
-    j[pair.first] = polys_json;
-  }
+  j["input_path"] = predictor_result_.input_path;
 
-  // Convert dt_scores to JSON
-  for (const auto& pair : predictor_result_.dt_scores) {
-    j[pair.first] = pair.second;
+  j["page_index"] = nullptr;  //********
+  json polys_json = json::array();
+  for (const auto& polygon : predictor_result_.dt_polys) {
+    json poly_json = json::array();
+    for (const auto& point : polygon) {
+      poly_json.push_back(
+          {static_cast<int>(point.x), static_cast<int>(point.y)});
+    }
+    polys_json.push_back(poly_json);
   }
+  j["dt_polys"] = polys_json;
+  j["dt_score"] = predictor_result_.dt_scores;
+
   auto result = Utility::CreateFile(save_path);
   if (!result.ok()) {
     std::cerr << result.ToString();
   }
-  // Write JSON to file
+
   std::ofstream file(save_path);
   if (file.is_open()) {
     file << j.dump(4);

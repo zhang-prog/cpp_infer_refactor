@@ -25,7 +25,8 @@ TextDetPredictor::TextDetPredictor(
     int limit_side_len, const std::string& limit_type, float thresh,
     float box_thresh, float unclip_ratio, const std::vector<int>& input_shape,
     int max_side_limit)
-    : BasePredictor(model_dir, device, enable_mkldnn, batch_size, config),
+    : BasePredictor(model_dir, device, enable_mkldnn, batch_size, config,
+                    "image"),
       limit_side_len_(limit_side_len),
       limit_type_(limit_type),
       thresh_(thresh),
@@ -64,41 +65,44 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   if (!batch_raw_imgs.ok()) {
     std::cerr << batch_raw_imgs.status().ToString();
   }
-  std::vector<int> origin_shape = {(*batch_raw_imgs)[0].rows,
-                                   (*batch_raw_imgs)[0].cols};
-  auto batch_imgs = pre_op_.at("Resize")->Apply(*batch_raw_imgs);
+  std::vector<int> origin_shape = {batch_raw_imgs.value()[0].rows,
+                                   batch_raw_imgs.value()[0].cols};
+  auto batch_imgs = pre_op_.at("Resize")->Apply(batch_raw_imgs.value());
   if (!batch_imgs.ok()) {
     std::cerr << batch_imgs.status().ToString();
   }
-  auto batch_imgs_normalize = pre_op_.at("Normalize")->Apply(*batch_imgs);
+  auto batch_imgs_normalize =
+      pre_op_.at("Normalize")->Apply(batch_imgs.value());
   if (!batch_imgs_normalize.ok()) {
     std::cerr << batch_imgs_normalize.status().ToString();
   }
 
-  auto batch_imgs_to_chw = pre_op_.at("ToCHW")->Apply(*batch_imgs_normalize);
+  auto batch_imgs_to_chw =
+      pre_op_.at("ToCHW")->Apply(batch_imgs_normalize.value());
   if (!batch_imgs_to_chw.ok()) {
     std::cerr << batch_imgs_to_chw.status().ToString();
   }
-  auto batch_imgs_to_batch = pre_op_.at("ToBatch")->Apply(*batch_imgs_to_chw);
+  auto batch_imgs_to_batch =
+      pre_op_.at("ToBatch")->Apply(batch_imgs_to_chw.value());
   if (!batch_imgs_to_batch.ok()) {
     std::cerr << batch_imgs_to_batch.status().ToString();
   }
-  auto infer_result = infer_ptr_->Apply(*batch_imgs_to_batch);
+  auto infer_result = infer_ptr_->Apply(batch_imgs_to_batch.value());
   if (!infer_result.ok()) {
     std::cerr << infer_result.status().ToString();
   }
-  auto db_result =
-      post_op_.at("DBPostProcess")->Apply((*infer_result)[0], origin_shape);
+  auto db_result = post_op_.at("DBPostProcess")
+                       ->Apply(infer_result.value()[0], origin_shape);
 
   if (!db_result.ok()) {
     std::cerr << db_result.status().ToString();
   }
   for (int i = 0; i < db_result.value().size(); i++) {
     TextDetPredictorResult predictor_result;
-    predictor_result.input_path["input_path"] = input_path_;
-    predictor_result.input_image["input_image"] = origin_image[i];
-    predictor_result.dt_polys["dt_polys"] = (*db_result)[i].first;
-    predictor_result.dt_scores["dt_score"] = (*db_result)[i].second;
+    predictor_result.input_path = input_path_;
+    predictor_result.input_image = origin_image[i];
+    predictor_result.dt_polys = db_result.value()[i].first;
+    predictor_result.dt_scores = db_result.value()[i].second;
     predictor_result_vec_.push_back(predictor_result);
   }
   std::vector<std::unique_ptr<BaseCVResult>> base_cv_result_ptr_vec = {};
@@ -107,15 +111,6 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
         std::unique_ptr<BaseCVResult>(new TextDetResult(predictor_result));
     base_cv_result_ptr_vec.emplace_back(std::move(base_cv_result_ptr));
   }
+  predictor_result_vec_.clear();  //******
   return std::move(base_cv_result_ptr_vec);
-}
-
-std::unique_ptr<BaseBatchSampler> TextDetPredictor::BuildBatchSampler() {
-  std::unique_ptr<BaseBatchSampler> sampler =
-      std::unique_ptr<BaseBatchSampler>(new ImageBatchSampler(batch_size_));
-  return sampler;
-}
-
-std::unique_ptr<BaseCVResult> TextDetPredictor::GetResultClass() {
-  return nullptr;
 }

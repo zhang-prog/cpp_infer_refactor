@@ -14,6 +14,7 @@
 
 #include "static_infer.h"
 
+#include "src/utils/mkldnn_blocklist.h"
 #include "src/utils/utility.h"
 
 PaddleInfer::PaddleInfer(const std::string &model_name,
@@ -52,19 +53,19 @@ absl::StatusOr<std::shared_ptr<paddle_infer::Predictor>> PaddleInfer::Create() {
     return absl::NotFoundError("No valid PaddlePaddle model found");
   }
 
-  auto result = CheckRunMode();
-  if (!result.ok()) {
-    return result;
+  auto result_check = CheckRunMode();
+  if (!result_check.ok()) {
+    return result_check;
   }
 
-  auto model_files = (*model_paths)["paddle"];
+  auto model_files = model_paths.value()["paddle"];
   std::string model_file = model_files.first;
   std::string params_file = model_files.second;
 
   if (option_.DeviceType() == "cpu" && option_.DeviceId() >= 0) {
-    auto result_device_id = option_.SetDeviceIdCpu(-1);  //*********F
-    if (!result_device_id.ok()) {
-      return result_device_id;
+    auto result_set = option_.SetDeviceId(0);
+    if (!result_set.ok()) {
+      return result_set;
     }
     std::cout << "`device_id` has been set to nullptr" << std::endl;
   }
@@ -133,8 +134,10 @@ absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
     const std::vector<cv::Mat> &x) {
   for (size_t i = 0; i < x.size(); ++i) {
     auto &input_handle = input_handles_[i];
-    std::vector<int> input_shape = {x[0].size[0], x[0].size[1], x[0].size[2],
-                                    x[0].size[3]};
+    std::vector<int> input_shape = {};
+    for (int i = 0; i < x[0].dims; i++) {
+      input_shape.push_back(x[0].size[i]);
+    }
     input_handle->Reshape(input_shape);
     input_handle->CopyFromCpu<float>((float *)x[i].data);
   }
@@ -159,7 +162,7 @@ absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
 
 absl::Status PaddleInfer::CheckRunMode() {
   if (option_.RunMode().rfind("mkldnn", 0) == 0 &&
-      Utility::MKLDNN_BLOCKLIST.count(model_name_) > 0 &&
+      Mkldnn::MKLDNN_BLOCKLIST.count(model_name_) > 0 &&
       option_.DeviceType() == "cpu") {
     std::cout << "The model(" + model_name_ +
                      ") is not supported to run in MKLDNN mode! Using `paddle` "

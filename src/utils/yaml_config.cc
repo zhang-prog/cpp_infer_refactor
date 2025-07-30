@@ -19,23 +19,44 @@
 
 #include "absl/strings/str_cat.h"
 
-YamlConfig::YamlConfig(const std::string& file_name) {
-  absl::Status status = LoadFile(file_name);
+YamlConfig::YamlConfig(const std::string& model_dir) {
+  auto status_get = GetConfigYamlPaths(model_dir);
+  if (!status_get.ok()) {
+    std::cerr << "Could find files with the .yaml or .yml in " + model_dir +
+                     " !"
+              << status_get.ToString() << std::endl;
+  }
+  auto status = LoadYamlFile();
   if (!status.ok()) {
-    std::cerr << "Failed to load config: " << status.message() << std::endl;
+    std::cerr << "Failed to load config: " << status.ToString() << std::endl;
   }
   Init();
-  return;
 }
 
-absl::Status YamlConfig::LoadFile(const std::string& filename) {
+absl::Status YamlConfig::GetConfigYamlPaths(const std::string& model_dir) {
+  std::string config_path_yml =
+      model_dir + "/" + Utility::MODEL_FILE_PREFIX + ".yml";
+  std::string config_path_yaml =
+      model_dir + "/" + Utility::MODEL_FILE_PREFIX + ".yaml";
+  if (Utility::FileExists(config_path_yml).ok()) {
+    config_yaml_path_ = config_path_yml;
+    return absl::OkStatus();
+  } else if (Utility::FileExists(config_path_yaml).ok()) {
+    config_yaml_path_ = config_path_yaml;
+    return absl::OkStatus();
+  } else {
+    return absl::NotFoundError("file is not exist!");
+  }
+};
+
+absl::Status YamlConfig::LoadYamlFile() {
   try {
-    YAML::Node config = YAML::LoadFile(filename);
+    YAML::Node config = YAML::LoadFile(config_yaml_path_);
     ParseNode(config);
     return absl::OkStatus();
   } catch (const YAML::BadFile& e) {
     return absl::NotFoundError(
-        absl::StrCat("Failed to open YAML file: ", filename));
+        absl::StrCat("Failed to open YAML file: ", config_yaml_path_));
   } catch (const YAML::ParserException& e) {
     return absl::InvalidArgumentError(
         absl::StrCat("Failed to parse YAML file: ", e.what()));

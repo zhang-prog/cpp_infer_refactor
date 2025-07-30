@@ -19,20 +19,31 @@
 #include <iostream>
 
 #include "base_batch_sampler.h"
+#include "src/common/image_batch_sampler.h"
 #include "src/utils/pp_option.h"
 #include "src/utils/utility.h"
 
 BasePredictor::BasePredictor(
     const std::string& model_dir, const std::string& device,
     const bool enable_mkldnn, int batch_size,
-    const std::unordered_map<std::string, std::string>& config)
-    : model_dir_(model_dir), batch_size_(batch_size), config_(config) {
+    const std::unordered_map<std::string, std::string>& config,
+    const std::string sampler_type)
+    : model_dir_(model_dir),
+      batch_size_(batch_size),
+      config_(config),
+      sampler_type_(sampler_type) {
   if (config.empty()) {
-    auto result = LoadConfig("/workspace/cpp_infer_refactor/inference.yml");
-    if (!result.ok()) {
-      std::cerr << result.ToString();
-    }
+    config_ = YamlConfig(model_dir_);
   }
+  auto status_build = BuildBatchSampler();
+  if (!status_build.ok()) {
+    std::cerr << "Build sampler fail: " << status_build.ToString();
+  }
+  auto model_name = config_.GetString(std::string("Global.model_name"));
+  if (!model_name.ok()) {
+    std::cerr << model_name.status().ToString();
+  }
+  model_name_ = model_name.value();
   pp_option_ptr_.reset(new PaddlePredictorOption());
 
   size_t pos = device.find(':');
@@ -82,41 +93,27 @@ std::vector<std::unique_ptr<BaseCVResult>> BasePredictor::Predict(
   return result;
 }
 
-absl::Status BasePredictor::LoadConfig(const std::string& config_path) {
-  config_ = YamlConfig(config_path);
-  ;
-  return absl::OkStatus();
-}
-
 const PaddlePredictorOption& BasePredictor::PPOption() {
   return *pp_option_ptr_;
-}
-
-absl::StatusOr<std::string> BasePredictor::GetModelName() {
-  auto model_name = config_.GetString(std::string("Global.model_name"));
-  if (!model_name.ok()) {
-    return model_name.status();
-  }
-  return model_name;
-}
-
-std::string BasePredictor::ConfigPath() {
-  auto config_path = Utility::GetConfigPaths(model_dir_);
-  if (config_path.ok()) {
-    return config_path.value();
-  }
-  return "";
 }
 
 void BasePredictor::SetBatchSize(int batch_size) { batch_size_ = batch_size; }
 
 std::unique_ptr<PaddleInfer> BasePredictor::CreateStaticInfer() {
-  batch_sampler_ptr_ = BuildBatchSampler();  //**********
-  // result_class_ptr_ = GetResultClass();  //已在实现类直接返回 baseCVResult
-  auto model_name = GetModelName();
-  if (!model_name.ok()) {
-    std::cerr << "Could find model:" << model_name.status().ToString();
-  }
   return std::unique_ptr<PaddleInfer>(
-      new PaddleInfer(*model_name, model_dir_, MODEL_FILE_PREFIX, PPOption()));
+      new PaddleInfer(model_name_, model_dir_, MODEL_FILE_PREFIX, PPOption()));
 }
+
+absl::Status BasePredictor::BuildBatchSampler() {
+  if (SAMPLER_TYPE.count(sampler_type_) == 0) {
+    return absl::InvalidArgumentError("Unsupported sampler type !");
+  } else if (sampler_type_ == "image") {
+    batch_sampler_ptr_ =
+        std::unique_ptr<BaseBatchSampler>(new ImageBatchSampler(batch_size_));
+  }
+  return absl::OkStatus();
+}
+
+const std::unordered_set<std::string> BasePredictor::SAMPLER_TYPE = {
+    "image",
+};

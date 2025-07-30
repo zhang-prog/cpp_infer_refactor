@@ -15,15 +15,3 @@
 #include "func_register.h"
 
 #include <iostream>
-
-// std::unique_ptr<BaseProcessor> FuncRegister::Apply(const std::string &key) {
-//   auto it = register_map_.find(key);
-//   if (it != register_map_.end() && it->second) {
-//     return std::move(it->second);
-//   } else {
-//     std::cerr << "Class with key (" << key << ") not found or not
-//     initialized."
-//               << std::endl;
-//     return nullptr;
-//   }
-// }

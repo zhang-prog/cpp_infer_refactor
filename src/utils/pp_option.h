@@ -24,8 +24,8 @@
 
 class PaddlePredictorOption {
  public:
-  const std::vector<std::string> SUPPORT_RUN_MODE = {
-      "paddle", "paddle_fp32", "paddle_fp16", "mkldnn", "mkldnn_bf16"};
+  const std::vector<std::string> SUPPORT_RUN_MODE = {"paddle", "paddle_fp16",
+                                                     "mkldnn", "mkldnn_bf16"};
 
   const std::vector<std::string> SUPPORT_DEVICE = {"gpu", "cpu"};
 
@@ -44,7 +44,6 @@ class PaddlePredictorOption {
   absl::Status SetRunMode(const std::string& run_mode);
   absl::Status SetDeviceType(const std::string& device_type);
   absl::Status SetDeviceId(int device_id);
-  absl::Status SetDeviceIdCpu(int device_id);
   absl::Status SetCpuThreads(int cpu_threads);
   void SetDeletePass(const std::vector<std::string>& delete_pass);
   void SetEnableNewIR(bool enable_new_ir);
@@ -54,7 +53,7 @@ class PaddlePredictorOption {
  private:
   std::string run_mode_ = "paddle";
   std::string device_type_ = "cpu";
-  int device_id_ = -1;  //*****************
+  int device_id_ = 0;  //*****************
   int cpu_threads_ = 10;
   std::vector<std::string> delete_pass_ = {};
   bool enable_new_ir_ = true;

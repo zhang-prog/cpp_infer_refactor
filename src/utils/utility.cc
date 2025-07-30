@@ -28,28 +28,27 @@ absl::StatusOr<std::map<std::string, std::pair<std::string, std::string> > >
 Utility::GetModelPaths(const std::string& model_dir,
                        const std::string& model_file_prefix) {
   std::map<std::string, std::pair<std::string, std::string> > model_paths;
-  std::string pd_model_path;
+  std::string model_path;
 
   std::string json_path = model_dir + "/" + model_file_prefix + ".json";
   std::string pdmodel_path = model_dir + "/" + model_file_prefix + ".pdmodel";
-  std::string pdiparams_path =
-      model_dir + "/" + model_file_prefix + ".pdiparams";
+  std::string params_path = model_dir + "/" + model_file_prefix + ".pdiparams";
   if (FileExists(json_path).ok()) {
-    pd_model_path = json_path;
+    model_path = json_path;
   } else if (FileExists(pdmodel_path).ok()) {
-    pd_model_path = pdmodel_path;
+    model_path = pdmodel_path;
   } else {
     std::cerr << FileExists(json_path).ToString() << " and "
               << FileExists(pdmodel_path).ToString();
   }
 
-  if (pd_model_path.empty()) {
+  if (model_path.empty()) {
     return absl::NotFoundError(
         "No PaddlePaddle model file (.json or .pdmodel) found!");
   }
 
-  if (FileExists(pdiparams_path).ok()) {
-    model_paths["paddle"] = std::make_pair(pd_model_path, pdiparams_path);
+  if (FileExists(params_path).ok()) {
+    model_paths["paddle"] = std::make_pair(model_path, params_path);
   } else {
     return absl::NotFoundError(
         "No PaddlePaddle params file (.pdiparams) found!");
@@ -234,48 +233,3 @@ absl::Status Utility::CreateFile(const std::string& filepath) {
   outfile.close();
   return absl::OkStatus();
 }
-
-const std::unordered_set<std::string> Utility::MKLDNN_BLOCKLIST = {
-    "LaTeX_OCR_rec",
-    "PP-FormulaNet-L",
-    "PP-FormulaNet-S",
-    "UniMERNet",
-    "UVDoc",
-    "Cascade-MaskRCNN-ResNet50-FPN",
-    "Cascade-MaskRCNN-ResNet50-vd-SSLDv2-FPN",
-    "Mask-RT-DETR-M",
-    "Mask-RT-DETR-S",
-    "MaskRCNN-ResNeXt101-vd-FPN",
-    "MaskRCNN-ResNet101-FPN",
-    "MaskRCNN-ResNet101-vd-FPN",
-    "MaskRCNN-ResNet50-FPN",
-    "MaskRCNN-ResNet50-vd-FPN",
-    "MaskRCNN-ResNet50",
-    "SOLOv2",
-    "PP-TinyPose_128x96",
-    "PP-TinyPose_256x192",
-    "Cascade-FasterRCNN-ResNet50-FPN",
-    "Cascade-FasterRCNN-ResNet50-vd-SSLDv2-FPN",
-    "Co-DINO-Swin-L",
-    "Co-Deformable-DETR-Swin-T",
-    "FasterRCNN-ResNeXt101-vd-FPN",
-    "FasterRCNN-ResNet101-FPN",
-    "FasterRCNN-ResNet101",
-    "FasterRCNN-ResNet34-FPN",
-    "FasterRCNN-ResNet50-FPN",
-    "FasterRCNN-ResNet50-vd-FPN",
-    "FasterRCNN-ResNet50-vd-SSLDv2-FPN",
-    "FasterRCNN-ResNet50",
-    "FasterRCNN-Swin-Tiny-FPN",
-    "MaskFormer_small",
-    "MaskFormer_tiny",
-    "SLANeXt_wired",
-    "SLANeXt_wireless",
-    "SLANet",
-    "SLANet_plus",
-    "YOWO",
-    "SAM-H_box",
-    "SAM-H_point",
-    "PP-FormulaNet_plus-L",
-    "PP-FormulaNet_plus-M",
-    "PP-FormulaNet_plus-S"};

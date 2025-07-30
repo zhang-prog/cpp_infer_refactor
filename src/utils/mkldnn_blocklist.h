@@ -12,31 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef BASE_CV_RESULT_H
-#define BASE_CV_RESULT_H
+#include <unordered_set>
 
-#include <opencv2/opencv.hpp>
-#include <string>
-#include <unordered_map>
+namespace Mkldnn {
 
-#include "absl/status/statusor.h"
+extern const std::unordered_set<std::string> MKLDNN_BLOCKLIST;
 
-class ImageWriter {};
-
-class BaseCVResult {
- public:
-  BaseCVResult(const std::string &backend);
-
-  std::string Str() const;
-  std::unordered_map<std::string, cv::Mat> Img() const;
-  absl::Status Print() const;
-  absl::Status SaveToImg() const;
-
- protected:
-  std::unordered_map<std::string, std::string> res_;
-  ImageWriter img_writer_;
-  std::string ToStr() const;
-  virtual std::unordered_map<std::string, cv::Mat> ToImg() const = 0;
-};
-
-#endif  // BASE_CV_RESULT_H
+}

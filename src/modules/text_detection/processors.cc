@@ -131,13 +131,13 @@ absl::StatusOr<std::vector<cv::Mat>> DetResizeForTest::Apply(
           !param->limit_type.empty() ? param->limit_type : limit_type_,
           param->max_side_limit > 0 ? param->max_side_limit : max_side_limit_);
       if (!res.ok()) return res.status();
-      results.push_back(*res);
+      results.push_back(res.value());
     }
   } else {
     for (const auto& img : input) {
       auto res = Resize(img, limit_side_len_, limit_type_, max_side_limit_);
       if (!res.ok()) return res.status();
-      results.push_back(*res);
+      results.push_back(res.value());
     }
   }
   return results;

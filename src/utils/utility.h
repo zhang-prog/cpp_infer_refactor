@@ -49,6 +49,7 @@ class Utility {
       const std::string& model_file_prefix = MODEL_FILE_PREFIX);
   static absl::Status FileExists(const std::string& path);
 
+  // TODO windows
   static std::string GetCpuVendor();
 
   static void WriteBatchMatToTxt(const cv::Mat& batch,
@@ -57,7 +58,6 @@ class Utility {
                                    const std::string& filename);
   static void PrintShape(const cv::Mat& img);
 
-  static const std::unordered_set<std::string> MKLDNN_BLOCKLIST;
   static absl::Status CreateDirectory(const std::string& path);
   static absl::Status CreatePath(const std::string& path);
   static absl::Status CreateFile(const std::string& filepath);
