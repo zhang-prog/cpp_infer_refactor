@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef BASE_CV_RESULT_H
-#define BASE_CV_RESULT_H
+#pragma once
 
 #include <opencv2/opencv.hpp>
 #include <string>
@@ -33,7 +32,7 @@ class BaseCVResult {
   // absl::Status Print() const;
   absl::Status SaveToImg() const;
 
-  virtual void SaveToImg(const std::string& save_path) const = 0;
+  virtual void SaveToImg(const std::string& save_path) = 0;
   virtual void Print() const = 0;
   virtual void SaveToJson(const std::string& save_path) const = 0;
 
@@ -43,5 +42,3 @@ class BaseCVResult {
   std::string ToStr() const;
   // virtual std::unordered_map<std::string, cv::Mat> ToImg() const = 0;
 };
-
-#endif  // BASE_CV_RESULT_H

@@ -20,15 +20,19 @@
 #include "predictor.h"
 #include "src/base/base_cv_result.h"
 
-class TextDetResult : public BaseCVResult {
+class DocTrResult : public BaseCVResult {
  public:
-  TextDetResult(TextDetPredictorResult predictor_result)
+  DocTrResult(WarpPredictorResult predictor_result)
       : BaseCVResult(), predictor_result_(predictor_result){};
   // std::unordered_map<std::string, cv::Mat> ToImg() const override;
   void SaveToImg(const std::string& save_path) override;
   void Print() const override;
   void SaveToJson(const std::string& save_path) const override;
+  static int getAdaptiveFontScale(const std::string& text, int imgWidth,
+                                  int maxWidth, int minFont, int maxFont,
+                                  int thickness, int& outBaseline,
+                                  int& outFontFace);
 
  private:
-  TextDetPredictorResult predictor_result_;
+  WarpPredictorResult predictor_result_;
 };

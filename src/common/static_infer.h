@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef STATIC_INFER_H
-#define STATIC_INFER_H
+#pragma once
 
 #include <opencv2/opencv.hpp>
 #include <string>
@@ -21,16 +20,16 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "src/utils/ilogger.h"
 #include "src/utils/pp_option.h"
 #include "third_party/paddle_inference/paddle/include/paddle_inference_api.h"
-
 class PaddleInfer {
  public:
   explicit PaddleInfer(const std::string &model_name,
                        const std::string &model_dir,
                        const std::string &model_file_prefix,
                        const PaddlePredictorOption &option);
-
+  ~PaddleInfer() = default;
   absl::StatusOr<std::vector<cv::Mat>> Apply(
       const std::vector<cv::Mat> &x);  //***********
 
@@ -39,11 +38,8 @@ class PaddleInfer {
   std::string model_file_prefix_;
   std::string model_name_;
   PaddlePredictorOption option_;
-  std::shared_ptr<paddle_infer::Predictor>
-      predictor_;  //**官方api返回shared_ptr
-  // std::vector<std::unique_ptr<paddle::PaddleTensor>> input_handles_;
-  // //*********** std::vector<std::unique_ptr<paddle::PaddleTensor>>
-  // output_handles_;
+  std::shared_ptr<paddle_infer::Predictor> predictor_;
+
   std::vector<std::unique_ptr<paddle_infer::Tensor>> input_handles_;
   std::vector<std::unique_ptr<paddle_infer::Tensor>> output_handles_;
 
@@ -51,5 +47,3 @@ class PaddleInfer {
 
   absl::Status CheckRunMode();
 };
-
-#endif  // STATIC_INFER_H

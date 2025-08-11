@@ -14,7 +14,12 @@
 
 #include "utility.h"
 
+#include <dirent.h>
 #include <sys/stat.h>
+
+#include <regex>
+
+#include "ilogger.h"
 
 absl::Status Utility::FileExists(const std::string& path) {
   struct stat st;
@@ -24,22 +29,25 @@ absl::Status Utility::FileExists(const std::string& path) {
     return absl::NotFoundError("File is not exist:" + path);
   }
 }
-absl::StatusOr<std::map<std::string, std::pair<std::string, std::string> > >
+absl::StatusOr<std::map<std::string, std::pair<std::string, std::string>>>
 Utility::GetModelPaths(const std::string& model_dir,
                        const std::string& model_file_prefix) {
-  std::map<std::string, std::pair<std::string, std::string> > model_paths;
+  std::map<std::string, std::pair<std::string, std::string>> model_paths;
   std::string model_path;
 
-  std::string json_path = model_dir + "/" + model_file_prefix + ".json";
-  std::string pdmodel_path = model_dir + "/" + model_file_prefix + ".pdmodel";
-  std::string params_path = model_dir + "/" + model_file_prefix + ".pdiparams";
+  std::string json_path =
+      model_dir + PATH_SEPARATOR + model_file_prefix + ".json";
+  std::string pdmodel_path =
+      model_dir + PATH_SEPARATOR + model_file_prefix + ".pdmodel";
+  std::string params_path =
+      model_dir + PATH_SEPARATOR + model_file_prefix + ".pdiparams";
   if (FileExists(json_path).ok()) {
     model_path = json_path;
   } else if (FileExists(pdmodel_path).ok()) {
     model_path = pdmodel_path;
   } else {
-    std::cerr << FileExists(json_path).ToString() << " and "
-              << FileExists(pdmodel_path).ToString();
+    return absl::NotFoundError(FileExists(json_path).ToString() + " and " +
+                               FileExists(pdmodel_path).ToString());
   }
 
   if (model_path.empty()) {
@@ -57,14 +65,52 @@ Utility::GetModelPaths(const std::string& model_dir,
   return model_paths;
 }
 
+absl::StatusOr<std::string> Utility::FindModelPath(
+    const std::string& model_dir, const std::string& model_name) {
+  char last_char = model_dir.back();
+  std::string model_path;
+  if (last_char == PATH_SEPARATOR)
+    model_path = model_dir + model_name;
+  else
+    model_path = model_dir + PATH_SEPARATOR + model_name;
+  auto status = FileExists(model_path);
+  if (!status.ok()) {
+    return status;
+  }
+  return model_path;
+}
+absl::StatusOr<std::string> Utility::GetDefaultConfig(
+    std::string pipeline_name) {
+  std::string current_path = __FILE__;
+  for (int i = 0; i < 2; i++) {
+    size_t pos = current_path.find_last_of(PATH_SEPARATOR);
+    if (pos == std::string::npos) {
+      return absl::NotFoundError("Could not find pipline config yaml :" +
+                                 pipeline_name);
+    }
+    current_path = current_path.substr(0, pos);
+  }
+  std::string config_path_yaml = current_path + PATH_SEPARATOR + "configs" +
+                                 PATH_SEPARATOR + pipeline_name + ".yaml";
+  std::string config_path_yml = current_path + PATH_SEPARATOR + "configs" +
+                                PATH_SEPARATOR + pipeline_name + ".yml";
+  if (FileExists(config_path_yaml).ok()) {
+    return config_path_yaml;
+  } else if (FileExists(config_path_yml).ok()) {
+    return config_path_yml;
+  }
+  return absl::NotFoundError("Could not find pipline config yaml :" +
+                             pipeline_name);
+}
 absl::StatusOr<std::string> Utility::GetConfigPaths(
     const std::string& model_dir, const std::string& model_file_prefix) {
   std::string config_path = "";
-  std::string config_path_find = model_dir + "/" + model_file_prefix + ".yml";
+  std::string config_path_find =
+      model_dir + PATH_SEPARATOR + model_file_prefix + ".yml";
   if (FileExists(config_path_find).ok()) {
     config_path = config_path_find;
   } else {
-    std::cerr << FileExists(config_path_find).ToString();
+    INFOE(FileExists(config_path_find).ToString().c_str());
   }
   return config_path;
 };
@@ -87,7 +133,7 @@ void Utility::WriteBatchMatToTxt(const cv::Mat& batch,
                                  const std::string& filename) {
   // 检查维度和类型
   if (batch.dims != 4 || batch.type() != CV_32F) {
-    std::cerr << "Input must be 4D CV_32F Mat." << std::endl;
+    INFOE("Input must be 4D CV_32F Mat.");
     return;
   }
 
@@ -98,7 +144,7 @@ void Utility::WriteBatchMatToTxt(const cv::Mat& batch,
 
   std::ofstream fout(filename);
   if (!fout.is_open()) {
-    std::cerr << "Cannot open file for writing: " << filename << std::endl;
+    INFOE("Cannot open file for writing: ");
     return;
   }
 
@@ -123,7 +169,7 @@ void Utility::WriteBatchMatToTxt_X(const cv::Mat& mat,
                                    const std::string& filename) {
   std::ofstream fout(filename);
   if (!fout.is_open()) {
-    std::cerr << "Cannot open file for writing: " << filename << std::endl;
+    INFOE("Cannot open file for writing: %s ", filename.c_str());
     return;
   }
 
@@ -131,43 +177,43 @@ void Utility::WriteBatchMatToTxt_X(const cv::Mat& mat,
   for (int i = 0; i < mat.dims; ++i) {
     fout << "Size[" << i << "]: " << mat.size[i] << "\n";
   }
-  fout << "Type: " << mat.type() << "\n\n";
+  fout << "Type: " << mat.type() << " (depth=" << mat.depth()
+       << ", channels=" << mat.channels() << ")\n\n";
 
-  size_t total_elements = mat.total();
+  int channels = mat.channels();
+  int depth = mat.depth();
+  size_t total_elements = mat.total();  // 元素数（像素点数，不含通道）
 
-  switch (mat.type()) {
-    case CV_8U:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << static_cast<int>(mat.ptr<uchar>()[i]) << "\n";
-      break;
-    case CV_8S:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << static_cast<int>(mat.ptr<char>()[i]) << "\n";
-      break;
-    case CV_16U:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << mat.ptr<ushort>()[i] << "\n";
-      break;
-    case CV_16S:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << mat.ptr<short>()[i] << "\n";
-      break;
-    case CV_32S:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << mat.ptr<int>()[i] << "\n";
-      break;
-    case CV_32F:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << mat.ptr<float>()[i] << "\n";
-      break;
-    case CV_64F:
-      for (size_t i = 0; i < total_elements; ++i)
-        fout << mat.ptr<double>()[i] << "\n";
-      break;
-    default:
-      std::cerr << "Unsupported mat type: " << mat.type() << std::endl;
-      fout.close();
-      return;
+  for (size_t i = 0; i < total_elements; ++i) {
+    for (int c = 0; c < channels; ++c) {
+      switch (depth) {
+        case CV_8U:
+          fout << static_cast<int>(mat.ptr<uchar>()[i * channels + c]) << "\n";
+          break;
+        case CV_8S:
+          fout << static_cast<int>(mat.ptr<schar>()[i * channels + c]) << "\n";
+          break;
+        case CV_16U:
+          fout << mat.ptr<ushort>()[i * channels + c] << "\n";
+          break;
+        case CV_16S:
+          fout << mat.ptr<short>()[i * channels + c] << "\n";
+          break;
+        case CV_32S:
+          fout << mat.ptr<int>()[i * channels + c] << "\n";
+          break;
+        case CV_32F:
+          fout << mat.ptr<float>()[i * channels + c] << "\n";
+          break;
+        case CV_64F:
+          fout << mat.ptr<double>()[i * channels + c] << "\n";
+          break;
+        default:
+          INFOE("Unsupported mat depth: %d ", depth);
+          fout.close();
+          return;
+      }
+    }
   }
 
   fout.close();
@@ -201,12 +247,11 @@ absl::Status Utility::CreatePath(const std::string& path) {
   std::string tmp;
   for (size_t i = 0; i < path.size(); ++i) {
     tmp += path[i];
-    if (path[i] == '/' || path[i] == '\\') {
+    if (path[i] == PATH_SEPARATOR) {
       paths.push_back(tmp);
     }
   }
-  if (!tmp.empty() && tmp.back() != '/' && tmp.back() != '\\')
-    paths.push_back(tmp);
+  if (!tmp.empty() && tmp.back() != PATH_SEPARATOR) paths.push_back(tmp);
 
   std::string current;
   for (size_t i = 0; i < paths.size(); ++i) {
@@ -233,3 +278,191 @@ absl::Status Utility::CreateFile(const std::string& filepath) {
   outfile.close();
   return absl::OkStatus();
 }
+
+absl::StatusOr<std::vector<cv::Mat>> Utility::SplitBatch(const cv::Mat& batch) {
+  if (batch.dims < 1) {
+    return absl::InvalidArgumentError(
+        "Input batch must have at least 1 dimension.");
+  }
+  if (batch.type() != CV_32F) {
+    return absl::InvalidArgumentError(
+        "Input batch must have CV_32F element type.");
+  }
+
+  std::vector<cv::Mat> split_mats;
+  int batch_size = batch.size[0];  // 第0维
+  std::vector<cv::Range> ranges(batch.dims);
+  for (int i = 0; i < batch_size; ++i) {
+    ranges[0] = cv::Range(i, i + 1);
+    for (int d = 1; d < batch.dims; ++d) ranges[d] = cv::Range::all();
+    cv::Mat sub_mat = batch(&ranges[0]);
+
+    split_mats.push_back(sub_mat);
+  }
+
+  return split_mats;
+}
+
+std::string Utility::GetFileExtension(const std::string& file_path) {
+  size_t pos = file_path.find_last_of('.');
+  if (pos == std::string::npos || pos == file_path.length() - 1) {
+    return "";
+  }
+  return file_path.substr(pos + 1);
+}
+
+std::string Utility::ToLower(const std::string& str) {
+  std::string result = str;
+  std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+  return result;
+}
+
+bool Utility::IsDirectory(const std::string& path) {
+  struct stat path_stat;
+  if (stat(path.c_str(), &path_stat) != 0) {
+    return false;
+  }
+  return S_ISDIR(path_stat.st_mode);
+}
+
+void Utility::GetFilesRecursive(const std::string& dir_path,
+                                std::vector<std::string>& file_list) {
+  DIR* dir = opendir(dir_path.c_str());
+  if (dir == NULL) {
+    return;
+  }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    std::string name = entry->d_name;
+    if (name == "." || name == "..") {
+      continue;
+    }
+
+    std::string full_path = "";
+    if (dir_path.back() == PATH_SEPARATOR) {
+      full_path = dir_path + name;
+    } else {
+      full_path = dir_path + PATH_SEPARATOR + name;
+    }
+
+    if (Utility::IsDirectory(full_path)) {
+      Utility::GetFilesRecursive(full_path, file_list);
+    } else if (IsImageFile(full_path)) {
+      file_list.push_back(full_path);
+    }
+  }
+
+  closedir(dir);
+}
+
+bool Utility::IsImageFile(const std::string& file_path) {
+  std::string extension = GetFileExtension(file_path);
+  std::string lower_ext = ToLower(extension);
+  return kImgSuffixes.find(lower_ext) != kImgSuffixes.end();
+}
+
+absl::StatusOr<cv::Mat> Utility::LoadImage(const std::string& file_path) {
+  cv::Mat image = cv::imread(file_path, cv::IMREAD_COLOR);
+  if (image.empty()) {
+    return absl::InvalidArgumentError("Failed to load image: " + file_path);
+  }
+  return image;
+}
+
+int Utility::MakeDir(const std::string& path) {
+#ifdef _WIN32
+  return _mkdir(path.c_str());
+#else
+  return mkdir(path.c_str(), 0755);  // Linux/macOS 权限 755
+#endif
+}
+
+absl::Status Utility::CreateDirectoryRecursive(const std::string& path) {
+  if (path.empty()) {
+    return absl::InvalidArgumentError("Path cannot be empty");
+  }
+
+  size_t pos = 0;
+  std::string dir = path;
+
+  while (pos < dir.size()) {
+    pos = dir.find_first_of(PATH_SEPARATOR, pos + 1);
+    std::string subdir = (pos == std::string::npos) ? dir : dir.substr(0, pos);
+
+    if (!subdir.empty() && access(subdir.c_str(), F_OK) != 0) {
+      if (MakeDir(subdir) != 0) {
+        return absl::InternalError("Failed to create directory: " + subdir);
+      }
+    }
+
+    if (pos == std::string::npos) {
+      break;
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::Status Utility::CreateDirectoryForFile(const std::string& filePath) {
+  size_t found = filePath.find_last_of(PATH_SEPARATOR);
+  if (found != std::string::npos) {
+    std::string dirPath = filePath.substr(0, found);
+    if (!CreateDirectoryRecursive(dirPath).ok()) {
+      return absl::InternalError("Failed to create file: " + filePath);
+      ;
+    }
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<std::string> Utility::SmartCreateDirectoryForImage(
+    const std::string& save_path, const std::string& input_path) {
+  std::string full_path = save_path;
+  auto status = CreateDirectoryForFile(save_path);
+  if (!status.ok()) {
+    return status;
+  }
+  if (Utility::IsDirectory(save_path)) {
+    auto file_path = input_path;
+    size_t pos = file_path.find_last_of(PATH_SEPARATOR);
+    std::string file_name =
+        (pos == std::string::npos) ? file_path : file_path.substr(pos + 1);
+    size_t dot_pos = file_name.find_last_of('.');
+    if (dot_pos == std::string::npos) {
+      file_name = file_name + "_res";
+    } else {
+      file_name.insert(dot_pos, "_res");
+    }
+    if (save_path.back() != PATH_SEPARATOR) {
+      full_path += PATH_SEPARATOR;
+    }
+    full_path += file_name;
+  }
+  return full_path;
+}
+
+absl::StatusOr<std::string> Utility::SmartCreateDirectoryForJson(
+    const std::string& save_path, const std::string& input_path) {
+  auto full_path = SmartCreateDirectoryForImage(save_path, input_path);
+  if (!full_path.ok()) {
+    return full_path.status();
+  }
+  size_t pos = full_path.value().rfind('.');
+  if (pos != std::string::npos) {
+    full_path.value().replace(pos, std::string::npos, ".json");
+  }
+  return full_path.value();
+}
+
+absl::StatusOr<int> Utility::StringToInt(std::string s) {
+  std::regex pattern("(\\d+)");
+  std::smatch match;
+  if (std::regex_search(s, match, pattern)) {
+    int value = std::stoi(match[1]);
+    return value;
+  } else {
+    return absl::NotFoundError("Could not find int !");
+  }
+}
+const std::set<std::string> Utility::kImgSuffixes = {"jpg", "png", "jpeg",
+                                                     "bmp"};

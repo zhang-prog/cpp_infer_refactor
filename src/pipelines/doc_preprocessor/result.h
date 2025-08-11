@@ -14,19 +14,20 @@
 
 #pragma once
 
-#include <iostream>
-#include <memory>
-#include <opencv2/opencv.hpp>
-#include <string>
-#include <unordered_map>
+#include "pipeline.h"
+#include "src/base/base_cv_result.h"
 
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-
-class BaseProcessor {
+class DocPreprocessorResult : public BaseCVResult {
  public:
-  BaseProcessor() = default;
-  virtual ~BaseProcessor() = default;
-  virtual absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input, const void* param_ptr = nullptr) const = 0;
+  DocPreprocessorResult(DocPreprocessorPipelineResult pipeline_result_)
+      : BaseCVResult(), pipeline_result_(pipeline_result_){};
+
+  void SaveToImg(const std::string& save_path) override;
+  void Print() const override;
+  void SaveToJson(const std::string& save_path) const override;
+  static void DrawText(cv::Mat& img, const std::string& text, int x, int y,
+                       int width);
+
+ private:
+  DocPreprocessorPipelineResult pipeline_result_;
 };

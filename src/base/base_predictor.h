@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef BASE_PREDICTOR_H_
-#define BASE_PREDICTOR_H_
+#pragma once
 
 #include <memory>
 #include <string>
@@ -32,11 +31,16 @@
 class BasePredictor {
  public:
   BasePredictor(const std::string &model_dir, const std::string &device = "cpu",
+                const std::string &precision = "fp32",
                 const bool enable_mkldnn = false, int batch_size = 1,
                 const std::unordered_map<std::string, std::string> &config = {},
                 const std::string sample_type = "");
   virtual ~BasePredictor() = default;
   std::vector<std::unique_ptr<BaseCVResult>> Predict(const std::string &input);
+
+  template <typename T>
+  std::vector<std::unique_ptr<BaseCVResult>> Predict(const T &input);
+
   std::unique_ptr<PaddleInfer> CreateStaticInfer();
 
   const PaddlePredictorOption &PPOption();
@@ -47,8 +51,12 @@ class BasePredictor {
 
   virtual std::vector<std::unique_ptr<BaseCVResult>> Process(
       std::vector<cv::Mat> &batch_data) = 0;
+  virtual void ResetResult() = 0;
   absl::Status BuildBatchSampler();
-  //   virtual std::unique_ptr<BaseCVResult> GetResultClass() = 0;
+
+  void SetInputPath(const std::vector<std::string> &input_path) {
+    input_path_ = input_path;
+  };
 
   template <typename T, typename... Args>
   void Register(const std::string &key, Args &&...args);
@@ -62,7 +70,7 @@ class BasePredictor {
   int batch_size_;
   std::unique_ptr<BaseBatchSampler> batch_sampler_ptr_;
   std::unique_ptr<PaddlePredictorOption> pp_option_ptr_;
-  std::string input_path_;  //************
+  std::vector<std::string> input_path_;
   std::string model_name_;
   std::string sampler_type_;
   std::unordered_map<std::string, std::unique_ptr<BaseProcessor>> pre_op_;
@@ -74,4 +82,21 @@ void BasePredictor::Register(const std::string &key, Args &&...args) {
   pre_op_[key] = std::move(instance);
 };
 
-#endif  // BASE_PREDICTOR_H_
+template <typename T>
+std::vector<std::unique_ptr<BaseCVResult>> BasePredictor::Predict(
+    const T &input) {
+  std::vector<std::unique_ptr<BaseCVResult>> result;
+  ResetResult();
+  auto batches = batch_sampler_ptr_->Apply(input);
+  if (!batches.ok()) {
+    INFOE("Get sample fail : %s", batches.status().ToString().c_str());
+  }
+  input_path_ = batch_sampler_ptr_->InputPath();
+  for (auto &batch_data : batches.value()) {
+    auto predictions = Process(batch_data);
+    for (auto &prediction : predictions) {
+      result.emplace_back(std::move(prediction));
+    }
+  }
+  return result;
+}

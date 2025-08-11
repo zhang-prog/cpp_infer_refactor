@@ -14,6 +14,9 @@
 
 #include "static_infer.h"
 
+#include <fstream>
+
+#include "src/utils/ilogger.h"
 #include "src/utils/mkldnn_blocklist.h"
 #include "src/utils/utility.h"
 
@@ -27,7 +30,7 @@ PaddleInfer::PaddleInfer(const std::string &model_name,
       option_(option) {
   auto result = Create();
   if (!result.ok()) {
-    std::cerr << "Create predictor failed: " << result.status() << std::endl;
+    INFOE("Create predictor failed: %s", result.status().ToString().c_str());
     return;
   }
 
@@ -67,7 +70,7 @@ absl::StatusOr<std::shared_ptr<paddle_infer::Predictor>> PaddleInfer::Create() {
     if (!result_set.ok()) {
       return result_set;
     }
-    std::cout << "`device_id` has been set to nullptr" << std::endl;
+    INFO("`device_id` has been set to nullptr");
   }
 
   if (option_.DeviceType() == "gpu" && option_.DeviceId() < 0) {
@@ -75,7 +78,7 @@ absl::StatusOr<std::shared_ptr<paddle_infer::Predictor>> PaddleInfer::Create() {
     if (!result_device_id.ok()) {
       return result_device_id;
     }
-    std::cout << "`device_id` has been set to 0" << std::endl;
+    INFO("`device_id` has been set to 0");
   }
 
   paddle_infer::Config config;
@@ -134,14 +137,20 @@ absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
     const std::vector<cv::Mat> &x) {
   for (size_t i = 0; i < x.size(); ++i) {
     auto &input_handle = input_handles_[i];
-    std::vector<int> input_shape = {};
+    std::vector<int> input_shape(x[0].dims);
     for (int i = 0; i < x[0].dims; i++) {
-      input_shape.push_back(x[0].size[i]);
+      input_shape[i] = x[0].size[i];
     }
     input_handle->Reshape(input_shape);
     input_handle->CopyFromCpu<float>((float *)x[i].data);
   }
-  predictor_->Run();
+  try {
+    predictor_->Run();
+  } catch (const std::exception &e) {
+    std::cerr << "Exception caught: " << e.what() << std::endl;
+  } catch (...) {
+    std::cerr << "Unknown exception caught!" << std::endl;
+  }
 
   std::vector<std::vector<float>> outputs;
   std::vector<int> output_shape = {};
@@ -153,6 +162,7 @@ absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
     output_handle->CopyToCpu(out_data.data());
     outputs.push_back(std::move(out_data));
   }
+  auto size_v = outputs[0].size();
   cv::Mat pred(output_shape.size(), output_shape.data(), CV_32F);
   memcpy(pred.ptr<float>(), outputs[0].data(),
          outputs[0].size() * sizeof(float));
@@ -164,10 +174,11 @@ absl::Status PaddleInfer::CheckRunMode() {
   if (option_.RunMode().rfind("mkldnn", 0) == 0 &&
       Mkldnn::MKLDNN_BLOCKLIST.count(model_name_) > 0 &&
       option_.DeviceType() == "cpu") {
-    std::cout << "The model(" + model_name_ +
-                     ") is not supported to run in MKLDNN mode! Using `paddle` "
-                     "instead!"
-              << std::endl;  //******
+    INFOW(
+        "The model %s is not supported to run in MKLDNN mode! Using `paddle` "
+        "instead!",
+        model_name_.c_str());
+
     auto result = option_.SetRunMode("paddle");
     if (!result.ok()) {
       return result;
@@ -177,10 +188,9 @@ absl::Status PaddleInfer::CheckRunMode() {
     std::string vendor_id_raw = Utility::GetCpuVendor();
     if (vendor_id_raw.find("GenuineIntel") != std::string::npos &&
         option_.RunMode() != "mkldnn") {
-      std::cout
-          << "Now, the `LaTeX_OCR_rec` model only support `mkldnn` mode when "
-             "running on Intel CPU devices. So using `mkldnn` instead."
-          << std::endl;
+      INFOE(
+          "Now, the `LaTeX_OCR_rec` model only support `mkldnn` mode when "
+          "running on Intel CPU devices. So using `mkldnn` instead.");
       auto result = option_.SetRunMode("mkldnn");
       if (!result.ok()) {
         return result;

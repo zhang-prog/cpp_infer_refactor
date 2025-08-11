@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PP_OPTION_H_
-#define PP_OPTION_H_
+#pragma once
 
 #include <set>
 #include <string>
@@ -60,5 +59,3 @@ class PaddlePredictorOption {
   bool enable_cinn_ = false;
   int mkldnn_cache_capacity_ = 10;
 };
-
-#endif  // PP_OPTION_H_

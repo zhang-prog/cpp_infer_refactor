@@ -21,28 +21,7 @@
 #include "third_party/nlohmann/json.hpp"
 
 using json = nlohmann::json;
-void TextDetResult::SaveToImg(const std::string& save_path) const {
-  auto file_path = predictor_result_.input_path;
-  size_t pos = file_path.find_last_of("/\\");
-  std::string file_name =
-      (pos == std::string::npos) ? file_path : file_path.substr(pos + 1);
-  size_t dot_pos = file_name.find_last_of('.');
-  if (dot_pos == std::string::npos) {
-    file_name = file_name + "_res";
-  } else {
-    file_name.insert(dot_pos, "_res");
-  }
-  file_name = "gsj.jpg";
-  std::string full_path = save_path;
-  if (save_path.back() != '/' && save_path.back() != '\\') {
-    full_path += '/';
-  }
-  auto result = Utility::CreatePath(full_path);
-  full_path += file_name;
-  if (!result.ok()) {
-    std::cerr << result.ToString();
-  }
-
+void TextDetResult::SaveToImg(const std::string& save_path) {
   cv::Mat img = predictor_result_.input_image.clone();
 
   const auto& dt_polys = predictor_result_.dt_polys;
@@ -57,11 +36,20 @@ void TextDetResult::SaveToImg(const std::string& save_path) const {
     cv::polylines(img, &pts_ptr, &npts, 1, true, cv::Scalar(0, 0, 255), 2);
   }
 
-  // 保存
-  bool success = cv::imwrite(full_path, img);
+  absl::StatusOr<std::string> full_path;
+  if (predictor_result_.input_path.empty()) {
+    INFOW("Input path is empty, will use output.jpg instead!");
+    full_path = Utility::SmartCreateDirectoryForImage(save_path, "output.jpg");
+  } else {
+    full_path = Utility::SmartCreateDirectoryForImage(
+        save_path, predictor_result_.input_path);
+  }
+  if (!full_path.ok()) {
+    INFOE(full_path.status().ToString().c_str());
+  }
+  bool success = cv::imwrite(full_path.value(), img);
   if (!success) {
-    std::cerr << "Error: Failed to write the image to " << full_path
-              << std::endl;
+    INFOE("Failed to write the image : %s", full_path.value().c_str());
   }
 }
 
@@ -80,11 +68,10 @@ void TextDetResult::Print() const {
       if (i < polygon.size() - 1) std::cout << ", ";
     }
     std::cout << "]," << std::endl;
-    std::cout << "      ]}," << std::endl;
   }
-  std::cout << "    ]," << std::endl;
 
-  // Print dt_scores
+  std::cout << "      ]}," << std::endl;
+
   std::cout << "    \"dt_scores\": [" << std::endl;
   for (auto it = predictor_result_.dt_scores.begin();
        it != predictor_result_.dt_scores.end(); ++it) {
@@ -116,16 +103,22 @@ void TextDetResult::SaveToJson(const std::string& save_path) const {
   j["dt_polys"] = polys_json;
   j["dt_score"] = predictor_result_.dt_scores;
 
-  auto result = Utility::CreateFile(save_path);
-  if (!result.ok()) {
-    std::cerr << result.ToString();
+  absl::StatusOr<std::string> full_path;
+  if (predictor_result_.input_path.empty()) {
+    INFOW("Input path is empty, will use output_res.json instead!");
+    full_path = Utility::SmartCreateDirectoryForJson(save_path, "output");
+  } else {
+    full_path = Utility::SmartCreateDirectoryForJson(
+        save_path, predictor_result_.input_path);
   }
-
-  std::ofstream file(save_path);
+  if (!full_path.ok()) {
+    INFOE(full_path.status().ToString().c_str());
+  }
+  std::ofstream file(full_path.value());
   if (file.is_open()) {
     file << j.dump(4);
     file.close();
   } else {
-    std::cerr << "Could not open file for writing: " << save_path << std::endl;
+    INFOE("Could not open file for writing: %s", save_path.c_str());
   }
 }

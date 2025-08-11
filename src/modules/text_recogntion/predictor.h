@@ -20,45 +20,33 @@
 #include "src/base/base_predictor.h"
 #include "src/common/processors.h"
 
-struct TextDetPredictorResult {
+struct TextRecPredictorResult {
   std::string input_path = "";
   cv::Mat input_image;
-  std::vector<std::vector<cv::Point2f>> dt_polys = {};
-  std::vector<float> dt_scores = {};
+  std::string rec_text;
+  float rec_score;
+  std::string vis_font;
 };
 
-struct TextDetPredictorParams {
+struct TextRecPredictorParams {
   std::string device = "cpu";
   std::string precision = "fp32";
   bool enable_mkldnn = false;
   int batch_size = 1;
   std::unordered_map<std::string, std::string> config = {};
-  int limit_side_len = 64;
-  std::string limit_type = "min";
-  float thresh = 0.3;
-  float box_thresh = 0.6;
-  float unclip_ratio = 1.5;
-  std::vector<int> input_shape = {};
-  int max_side_limit = 4000;
 };
 
-class TextDetPredictor : public BasePredictor {
+class TextRecPredictor : public BasePredictor {
  public:
-  TextDetPredictor(  //*********************
+  TextRecPredictor(
       const std::string &model_dir, const std::string &device = "cpu",
       const std::string &precision = "fp32", const bool enable_mkldnn = false,
       int batch_size = 1,
-      const std::unordered_map<std::string, std::string> &config = {},
+      const std::unordered_map<std::string, std::string> &config = {});
+  TextRecPredictor(const std::string &model_dir,
+                   const TextRecPredictorParams &params);
 
-      int limit_side_len = -1, const std::string &limit_type = "",
-      float thresh = -1, float box_thresh = -1, float unclip_ratio = -1,
-      const std::vector<int> &input_shape = std::vector<int>(),
-      int max_side_limit = 4000);
-
-  TextDetPredictor(const std::string &model_dir,
-                   const TextDetPredictorParams &params);
-
-  std::vector<TextDetPredictorResult> PredictorResult() const {
+  std::vector<TextRecPredictorResult> PredictorResult() const {
     return predictor_result_vec_;
   };
 
@@ -70,17 +58,9 @@ class TextDetPredictor : public BasePredictor {
       std::vector<cv::Mat> &batch_data) override;
 
  private:
-  int limit_side_len_;
-  std::string limit_type_;
-  float thresh_;
-  float box_thresh_;
-  float unclip_ratio_;
-  std::vector<int> input_shape_;
-  int max_side_limit_;
-
-  std::unordered_map<std::string, std::unique_ptr<DBPostProcess>> post_op_;
-  std::vector<TextDetPredictorResult> predictor_result_vec_;
+  std::unordered_map<std::string, std::unique_ptr<CTCLabelDecode>> post_op_;
+  std::vector<TextRecPredictorResult> predictor_result_vec_;
   std::unique_ptr<PaddleInfer> infer_ptr_;
-  TextDetPredictorParams params_;
-  int input_index_ = 0;
+  TextRecPredictorParams params_;
+  int input_index_;
 };

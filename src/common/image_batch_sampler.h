@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef IMAGE_BATCH_SAMPLER_H_
-#define IMAGE_BATCH_SAMPLER_H_
+#pragma once
 
 #include <opencv2/opencv.hpp>
 #include <set>
@@ -29,25 +28,15 @@ class ImageBatchSampler : public BaseBatchSampler {
   explicit ImageBatchSampler(int batch_size = 1);
   virtual ~ImageBatchSampler() {}  //这里还没调研怎么实现  ？？？
 
-  absl::StatusOr<std::vector<std::vector<cv::Mat> > > SampleFromString(
+  absl::StatusOr<std::vector<std::vector<cv::Mat>>> SampleFromString(
       const std::string& input) override;
 
-  absl::StatusOr<std::vector<std::vector<cv::Mat> > > SampleFromVector(
+  absl::StatusOr<std::vector<std::vector<cv::Mat>>> SampleFromVector(
       const std::vector<std::string>& inputs) override;
 
- private:
-  absl::StatusOr<std::vector<std::string> > GetFilesList(
-      const std::string& path);
-  absl::StatusOr<cv::Mat> LoadImage(const std::string& file_path);
-  bool IsImageFile(const std::string& file_path) const;
-  bool IsDirectory(const std::string& path) const;
-  bool FileExists(const std::string& path) const;
-  std::string GetFileExtension(const std::string& file_path) const;
-  void GetFilesRecursive(const std::string& dir_path,
-                         std::vector<std::string>& file_list) const;
-  std::string ToLower(const std::string& str) const;
+  absl::StatusOr<std::vector<std::vector<cv::Mat>>> SampleFromMatVector(
+      const std::vector<cv::Mat>& inputs) override;
 
+ private:
   static const std::set<std::string> kImgSuffixes;
 };
-
-#endif  // IMAGE_BATCH_SAMPLER_H_

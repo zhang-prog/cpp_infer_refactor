@@ -18,80 +18,6 @@
 
 #include "src/utils/utility.h"
 
-ReadImage::ReadImage(const std::string& format) {
-  auto fmt = StringToFormat(format);
-  if (!fmt.ok()) {
-    std::cerr << fmt.status().ToString();
-  }
-  format_ = *fmt;
-}
-
-absl::StatusOr<std::vector<cv::Mat>> ReadImage::Apply(
-    std::vector<cv::Mat>& input, const void* param_ptr) const {
-  if (input.empty()) {
-    return absl::InvalidArgumentError("Input image vector is empty.");
-  }
-  std::vector<cv::Mat> output;
-  output.reserve(input.size());
-
-  for (size_t i = 0; i < input.size(); ++i) {
-    const cv::Mat& img = input[i];
-    if (img.empty()) {
-      return absl::InvalidArgumentError("Image at index " + std::to_string(i) +
-                                        " is empty.");
-    }
-
-    cv::Mat converted;
-    switch (format_) {
-      case Format::BGR:
-        if (img.channels() == 3) {
-          converted = img.clone();
-        } else if (img.channels() == 1) {
-          cv::cvtColor(img, converted, cv::COLOR_GRAY2BGR);
-        } else {
-          return absl::InvalidArgumentError("Image at index " +
-                                            std::to_string(i) +
-                                            " channel not supported for BGR.");
-        }
-        break;
-      case Format::RGB:
-        if (img.channels() == 3) {
-          cv::cvtColor(img, converted, cv::COLOR_BGR2RGB);
-        } else if (img.channels() == 1) {
-          cv::cvtColor(img, converted, cv::COLOR_GRAY2RGB);
-        } else {
-          return absl::InvalidArgumentError("Image at index " +
-                                            std::to_string(i) +
-                                            " channel not supported for RGB.");
-        }
-        break;
-      case Format::GRAY:
-        if (img.channels() == 3) {
-          cv::cvtColor(img, converted, cv::COLOR_BGR2GRAY);
-        } else if (img.channels() == 1) {
-          converted = img.clone();
-        } else {
-          return absl::InvalidArgumentError("Image at index " +
-                                            std::to_string(i) +
-                                            " channel not supported for GRAY.");
-        }
-        break;
-      default:
-        return absl::InvalidArgumentError("Unknown format.");
-    }
-    output.push_back(std::move(converted));
-  }
-  return output;
-}
-
-absl::StatusOr<ReadImage::Format> ReadImage::StringToFormat(
-    const std::string& format) {
-  if (format == "BGR") return Format::BGR;
-  if (format == "RGB") return Format::RGB;
-  if (format == "GRAY") return Format::GRAY;
-  return absl::InvalidArgumentError("Unsupported format: " + format);
-}
-
 DetResizeForTest::DetResizeForTest(int resize_long,
                                    std::vector<int> input_shape,
                                    std::vector<int> image_shape,
@@ -270,221 +196,6 @@ absl::StatusOr<cv::Mat> DetResizeForTest::ResizeImageType3(
   return resized;
 }
 
-NormalizeImage::NormalizeImage(double scale, const std::vector<double>& mean,
-                               const std::vector<double>& std)
-    : alpha_(CHANNEL), beta_(CHANNEL) {
-  for (size_t i = 0; i < CHANNEL; ++i) {
-    alpha_[i] = scale / std.at(i);
-    beta_[i] = -mean.at(i) / std.at(i);
-  }
-}
-
-absl::StatusOr<cv::Mat> NormalizeImage::Normalize(const cv::Mat& img) const {
-  if (img.empty()) {
-    return absl::InvalidArgumentError("Input image is empty.");
-  }
-  if (img.channels() != CHANNEL) {
-    return absl::InvalidArgumentError("Input image must have 3 channels.");
-  }
-  if (img.depth() != CV_8U && img.depth() != CV_32F) {
-    return absl::InvalidArgumentError("Input image must be CV_8U or CV_32F.");
-  }
-
-  cv::Mat input;
-  // 转 float
-  if (img.depth() == CV_8U) {
-    img.convertTo(input, CV_32F);
-  } else {
-    input = img.clone();
-  }
-
-  cv::Mat processed = input;
-
-  std::vector<cv::Mat> channels(CHANNEL);
-  cv::split(processed, channels);
-
-  for (int c = 0; c < CHANNEL; ++c) {
-    channels[c] = channels[c] * alpha_[c] + beta_[c];
-  }
-
-  cv::merge(channels, processed);
-  return processed;
-}
-
-absl::StatusOr<std::vector<cv::Mat>> NormalizeImage::Apply(
-    std::vector<cv::Mat>& imgs, const void* param) const {
-  std::vector<cv::Mat> results;
-  results.reserve(imgs.size());
-  for (const auto& img : imgs) {
-    auto normed = this->Normalize(img);
-    if (!normed.ok()) {
-      return normed.status();
-    }
-    results.push_back(std::move(normed).value());
-  }
-  return results;
-}
-
-absl::StatusOr<std::vector<cv::Mat>> ToCHWImage::operator()(
-    const std::vector<cv::Mat>& imgs_batch) {
-  std::vector<std::vector<cv::Mat>> chw_imgs_batch;
-
-  std::vector<cv::Mat> chw_imgs;
-  for (const auto& img : imgs_batch) {
-    if (img.empty()) {
-      return absl::InvalidArgumentError("Input image is empty!");
-    }
-    if (img.channels() != 3) {
-      return absl::InvalidArgumentError(
-          "Input image must have 3 channels (HWC format)!");
-    }
-
-    cv::Mat chw_img(3, img.rows * img.cols, CV_32F);
-    float* ptr = chw_img.ptr<float>();
-
-    for (int h = 0; h < img.rows; ++h) {
-      for (int w = 0; w < img.cols; ++w) {
-        const cv::Vec3b& pixel = img.at<cv::Vec3b>(h, w);
-        ptr[0 * img.total() + h * img.cols + w] = pixel[0];
-        ptr[1 * img.total() + h * img.cols + w] = pixel[1];
-        ptr[2 * img.total() + h * img.cols + w] = pixel[2];
-      }
-    }
-
-    chw_imgs.push_back(chw_img);
-  }
-
-  return chw_imgs;
-}
-
-absl::StatusOr<std::vector<cv::Mat>> ToCHWImage::Apply(
-    std::vector<cv::Mat>& input, const void* param) const {
-  std::vector<cv::Mat> chw_imgs;
-  for (const auto& img : input) {
-    if (img.empty()) {
-      return absl::InvalidArgumentError("Input image is empty!");
-    }
-    if (img.channels() != 3) {
-      return absl::InvalidArgumentError(
-          "Input image must have 3 channels (HWC format)!");
-    }
-
-    std::vector<int> sizes = {3, img.rows, img.cols};  // Define sizes for CHW
-    cv::Mat chw_img(3, sizes.data(), CV_32F);
-    float* ptr = chw_img.ptr<float>();
-    for (int h = 0; h < img.rows; ++h) {
-      for (int w = 0; w < img.cols; ++w) {
-        const cv::Vec3f& pixel = img.at<cv::Vec3f>(h, w);
-        ptr[0 * img.total() + h * img.cols + w] = pixel[0];
-        ptr[1 * img.total() + h * img.cols + w] = pixel[1];
-        ptr[2 * img.total() + h * img.cols + w] = pixel[2];
-      }
-    }
-
-    chw_imgs.push_back(chw_img);
-  }
-
-  return chw_imgs;
-}
-
-absl::StatusOr<std::vector<cv::Mat>> ToBatch::operator()(
-    const std::vector<cv::Mat>& imgs) const {
-  if (imgs.empty()) {
-    return absl::InvalidArgumentError("Input image vector is empty.");
-  }
-  const int batch = imgs.size();
-  const int rows = imgs[0].rows;
-  const int cols = imgs[0].cols;
-  const int channels = imgs[0].channels();
-
-  for (size_t i = 0; i < imgs.size(); ++i) {
-    if (imgs[i].rows != rows || imgs[i].cols != cols ||
-        imgs[i].channels() != channels) {
-      return absl::InvalidArgumentError(
-          "All images must have the same size and number of channels.");
-    }
-  }
-
-  std::vector<int> sizes = {batch, rows, cols, channels};
-  cv::Mat out(4, sizes.data(), CV_32F);
-
-  for (int b = 0; b < batch; ++b) {
-    cv::Mat img_float;
-    if (imgs[b].depth() != CV_32F) {
-      imgs[b].convertTo(img_float, CV_32F);
-    } else {
-      img_float = imgs[b];
-    }
-
-    for (int r = 0; r < rows; ++r) {
-      for (int c = 0; c < cols; ++c) {
-        if (channels == 1) {
-          float v = img_float.at<float>(r, c);
-          int idx[4] = {b, r, c, 0};
-          out.at<float>(idx) = v;
-        } else if (channels == 3) {
-          cv::Vec3f v = img_float.at<cv::Vec3f>(r, c);
-          for (int ch = 0; ch < 3; ++ch) {
-            int idx[4] = {b, r, c, ch};
-            out.at<float>(idx) = v[ch];
-          }
-        } else {
-          const float* pix = img_float.ptr<float>(r, c);
-          for (int ch = 0; ch < channels; ++ch) {
-            int idx[4] = {b, r, c, ch};
-            out.at<float>(idx) = pix[ch];
-          }
-        }
-      }
-    }
-  }
-  std::vector<cv::Mat> result{out};
-  return result;
-}
-
-absl::StatusOr<std::vector<cv::Mat>> ToBatch::Apply(std::vector<cv::Mat>& input,
-                                                    const void* param) const {
-  if (input.empty()) {
-    return absl::InvalidArgumentError("Input image vector is empty.");
-  }
-  const int batch = input.size();
-  const int rows = input[0].size[1];
-  const int cols = input[0].size[2];
-  const int channels = input[0].size[0];
-
-  for (size_t i = 0; i < input.size(); ++i) {
-    if (input[i].size[1] != rows || input[i].size[2] != cols ||
-        input[i].size[0] != channels) {
-      return absl::InvalidArgumentError(
-          "All images must have the same size and number of channels.");
-    }
-  }
-
-  std::vector<int> sizes = {batch, channels, rows, cols};
-  cv::Mat out(4, sizes.data(), CV_32F);
-
-  for (int b = 0; b < batch; ++b) {
-    cv::Mat img_float;
-    if (input[b].depth() != CV_32F) {
-      input[b].convertTo(img_float, CV_32F);
-    } else {
-      img_float = input[b];
-    }
-
-    for (int ch = 0; ch < channels; ++ch) {
-      for (int r = 0; r < rows; ++r) {
-        const float* row_ptr = img_float.ptr<float>(ch, r);
-        for (int c = 0; c < cols; ++c) {
-          int idx[4] = {b, ch, r, c};
-          out.at<float>(idx) = row_ptr[c];
-        }
-      }
-    }
-  }
-  std::vector<cv::Mat> result{out};
-  return result;
-}
-
 DBPostProcess::DBPostProcess(float thresh, float box_thresh, int max_candidates,
                              float unclip_ratio, bool use_dilation,
                              const std::string& score_mode,
@@ -510,7 +221,7 @@ DBPostProcess::operator()(const cv::Mat& preds,
                           absl::optional<float> unclip_ratio) {
   std::vector<std::vector<cv::Point2f>> all_boxes;
   std::vector<float> all_scores;
-  auto preds_batch = SplitBatch(preds);
+  auto preds_batch = Utility::SplitBatch(preds);
   if (!preds_batch.ok()) {
     return preds_batch.status();
   }
@@ -542,31 +253,21 @@ DBPostProcess::Apply(const cv::Mat& preds, const std::vector<int>& img_shapes,
   std::vector<
       std::pair<std::vector<std::vector<cv::Point2f>>, std::vector<float>>>
       db_result = {};
-  std::vector<std::vector<cv::Point2f>> all_boxes = {};
-  std::vector<float> all_scores = {};
 
-  auto preds_batch = SplitBatch(preds);
+  auto preds_batch = Utility::SplitBatch(preds);
 
   if (!preds_batch.ok()) {
     return preds_batch.status();
   }
-  for (const auto& preds_data : *preds_batch) {
-    auto result = Process(preds, img_shapes, thresh.value_or(thresh_),
+  for (const auto& pred : preds_batch.value()) {
+    auto result = Process(pred, img_shapes, thresh.value_or(thresh_),
                           box_thresh.value_or(box_thresh_),
                           unclip_ratio.value_or(unclip_ratio_));
 
     if (!result.ok()) {
       return result.status();
     }
-
-    auto boxes_result = *result;
-    auto boxes = boxes_result.first;
-    auto scores = boxes_result.second;
-    all_boxes.insert(all_boxes.end(), boxes.begin(), boxes.end());
-    all_scores.insert(all_scores.end(), scores.begin(), scores.end());
-    db_result.push_back(std::make_pair(all_boxes, all_scores));
-    all_boxes.clear();
-    all_scores.clear();
+    db_result.push_back(result.value());
   }
 
   return db_result;
@@ -577,8 +278,10 @@ absl::StatusOr<
 DBPostProcess::Process(const cv::Mat& pred, const std::vector<int>& img_shape,
                        float thresh, float box_thresh, float unclip_ratio) {
   cv::Mat pred_single = pred.clone();
-  cv::Mat result = pred_single.reshape(1, pred_single.size[2]);
-  cv::Mat segmentation = result > thresh;
+  std::vector<int> shape_pred = {pred_single.size[pred_single.dims - 2],
+                                 pred_single.size[pred_single.dims - 1]};
+  pred_single = pred_single.reshape(1, shape_pred);
+  cv::Mat segmentation = pred_single > thresh;
   cv::Mat mask;
   if (use_dilation_) {
     cv::Mat kernel = (cv::Mat_<uchar>(2, 2) << 1, 1, 1, 1);  //暂时未测试
@@ -696,7 +399,7 @@ DBPostProcess::BoxesFromBitmap(const cv::Mat& pred, const cv::Mat& bitmap,
   cv::findContours(bitmap_uint8, contours_, cv::RETR_LIST,
                    cv::CHAIN_APPROX_SIMPLE);
   std::vector<std::vector<cv::Point2f>> contours;
-  for (const auto& contour : contours_) {
+  for (const auto& contour : contours_) {  // 这里可以优化
     std::vector<cv::Point2f> float_contour;
     for (const auto& point : contour) {
       float_contour.push_back(cv::Point2f(point.x, point.y));
@@ -789,10 +492,9 @@ std::pair<std::vector<cv::Point2f>, float> DBPostProcess::GetMiniBoxes(
     const std::vector<cv::Point2f>& contour) {
   cv::RotatedRect box = cv::minAreaRect(contour);
 
-  cv::Point2f vertex[4];
-  box.points(vertex);
+  std::vector<cv::Point2f> points(4);
+  box.points(points.data());
 
-  std::vector<cv::Point2f> points(vertex, vertex + 4);
   std::sort(
       points.begin(), points.end(),
       [](const cv::Point2f& a, const cv::Point2f& b) { return a.x < b.x; });
@@ -821,83 +523,10 @@ std::pair<std::vector<cv::Point2f>, float> DBPostProcess::GetMiniBoxes(
   return std::make_pair(box_points, sside);
 }
 
-cv::Mat DBPostProcess::extract2DFromBitmap(const cv::Mat& bitmap, int ymin,
-                                           int ymax, int xmin, int xmax,
-                                           int batch_idx, int channel_idx) {
-  int roi_height = ymax - ymin + 1;
-  int roi_width = xmax - xmin + 1;
-
-  cv::Mat roi(roi_height, roi_width, bitmap.type());
-  for (int y = ymin; y <= ymax; y++) {
-    for (int x = xmin; x <= xmax; x++) {
-      int indices[] = {batch_idx, channel_idx, y, x};
-      float value = bitmap.at<float>(indices);
-      roi.at<float>(y - ymin, x - xmin) = value;
-    }
-  }
-
-  return roi;
-}
-
 float DBPostProcess::BoxScoreFast(const cv::Mat& bitmap,
-                                  const std::vector<cv::Point2f>& box) {
-  int h, w;
-  if (bitmap.dims == 4) {
-    // 获取最后两个维度作为 height 和 width
-    h = bitmap.size[bitmap.dims - 2];  // height
-    w = bitmap.size[bitmap.dims - 1];  // width
-  } else if (bitmap.dims == 2) {
-    h = bitmap.rows;
-    w = bitmap.cols;
-  } else {
-    throw std::runtime_error("Unsupported bitmap dimensions");
-  }
-
-  // Copy the box
-  std::vector<cv::Point2f> box_copy = box;
-
-  // Find min/max coordinates
-  float x_min = std::numeric_limits<float>::max();
-  float x_max = std::numeric_limits<float>::lowest();
-  float y_min = std::numeric_limits<float>::max();
-  float y_max = std::numeric_limits<float>::lowest();
-
-  for (const auto& point : box) {
-    x_min = std::min(x_min, point.x);
-    x_max = std::max(x_max, point.x);
-    y_min = std::min(y_min, point.y);
-    y_max = std::max(y_max, point.y);
-  }
-
-  int xmin = std::max(0, std::min(static_cast<int>(std::floor(x_min)), w - 1));
-  int xmax = std::max(0, std::min(static_cast<int>(std::ceil(x_max)), w - 1));
-  int ymin = std::max(0, std::min(static_cast<int>(std::floor(y_min)), h - 1));
-  int ymax = std::max(0, std::min(static_cast<int>(std::ceil(y_max)), h - 1));
-
-  cv::Mat mask = cv::Mat::zeros(ymax - ymin + 1, xmax - xmin + 1, CV_8UC1);
-
-  std::vector<cv::Point> box_int;
-  for (auto& point : box_copy) {
-    point.x -= xmin;
-    point.y -= ymin;
-    box_int.push_back(
-        cv::Point(static_cast<int>(point.x), static_cast<int>(point.y)));
-  }
-
-  std::vector<std::vector<cv::Point>> contours = {box_int};
-  cv::fillPoly(mask, contours, cv::Scalar(1));
-
-  cv::Mat roi = extract2DFromBitmap(bitmap, ymin, ymax, xmin, xmax, 0, 0);
-
-  cv::Scalar mean_val = cv::mean(roi, mask);
-
-  return mean_val[0];
-}
-
-float DBPostProcess::BoxScoreSlow(const cv::Mat& bitmap,
                                   const std::vector<cv::Point2f>& contour) {
-  int h = bitmap.rows;
-  int w = bitmap.cols;
+  int h = bitmap.size[bitmap.dims - 2];  // must be CHW
+  int w = bitmap.size[bitmap.dims - 1];
 
   std::vector<cv::Point2f> contour_copy = contour;
 
@@ -937,40 +566,78 @@ float DBPostProcess::BoxScoreSlow(const cv::Mat& bitmap,
 
   cv::Mat mask = cv::Mat::zeros(ymax - ymin + 1, xmax - xmin + 1, CV_8UC1);
 
+  std::vector<cv::Point> contour_copy_int;
   for (auto& point : contour_copy) {
     point.x -= xmin;
     point.y -= ymin;
+    contour_copy_int.push_back(
+        cv::Point(static_cast<int>(point.x), static_cast<int>(point.y)));
   }
 
-  std::vector<std::vector<cv::Point2f>> contours = {contour_copy};
+  std::vector<std::vector<cv::Point>> contours = {contour_copy_int};
+  cv::fillPoly(mask, contours, cv::Scalar(1));
+
+  cv::Mat roi = bitmap(cv::Rect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1));
+  cv::Scalar mean_val = cv::mean(roi, mask);
+
+  return mean_val[0];
+}
+
+float DBPostProcess::BoxScoreSlow(const cv::Mat& bitmap,
+                                  const std::vector<cv::Point2f>& contour) {
+  int h = bitmap.size[bitmap.dims - 2];  // must be CHW
+  int w = bitmap.size[bitmap.dims - 1];
+
+  std::vector<cv::Point2f> contour_copy = contour;
+
+  int xmin = std::max(
+      0, static_cast<int>(std::floor(
+             std::min_element(contour_copy.begin(), contour_copy.end(),
+                              [](const cv::Point2f& a, const cv::Point2f& b) {
+                                return a.x < b.x;
+                              })
+                 ->x)));
+  int xmax = std::max(
+      0, static_cast<int>(std::ceil(
+             std::max_element(contour_copy.begin(), contour_copy.end(),
+                              [](const cv::Point2f& a, const cv::Point2f& b) {
+                                return a.x < b.x;
+                              })
+                 ->x)));
+  int ymin = std::max(
+      0, static_cast<int>(std::floor(
+             std::min_element(contour_copy.begin(), contour_copy.end(),
+                              [](const cv::Point2f& a, const cv::Point2f& b) {
+                                return a.y < b.y;
+                              })
+                 ->y)));
+  int ymax = std::max(
+      0, static_cast<int>(std::ceil(
+             std::max_element(contour_copy.begin(), contour_copy.end(),
+                              [](const cv::Point2f& a, const cv::Point2f& b) {
+                                return a.y < b.y;
+                              })
+                 ->y)));
+
+  xmin = std::min(xmin, w - 1);
+  xmax = std::min(xmax, w - 1);
+  ymin = std::min(ymin, h - 1);
+  ymax = std::min(ymax, h - 1);
+
+  cv::Mat mask = cv::Mat::zeros(ymax - ymin + 1, xmax - xmin + 1, CV_8UC1);
+
+  std::vector<cv::Point> contour_copy_int;
+  for (auto& point : contour_copy) {
+    point.x -= xmin;
+    point.y -= ymin;
+    contour_copy_int.push_back(
+        cv::Point(static_cast<int>(point.x), static_cast<int>(point.y)));
+  }
+
+  std::vector<std::vector<cv::Point>> contours = {contour_copy_int};
   cv::fillPoly(mask, contours, 1);
 
   cv::Scalar mean = cv::mean(
       bitmap(cv::Rect(xmin, ymin, xmax - xmin + 1, ymax - ymin + 1)), mask);
   return static_cast<float>(mean[0]);
-}
-
-absl::StatusOr<std::vector<cv::Mat>> DBPostProcess::SplitBatch(
-    const cv::Mat& batch) {
-  if (batch.dims != 4) {
-    return absl::InvalidArgumentError("Input batch must be a 4D cv::Mat.");
-  }
-  if (batch.type() != CV_32F && batch.type() != CV_32F) {
-    return absl::InvalidArgumentError(
-        "Input batch must have CV_32F element type.");
-  }
-
-  std::vector<cv::Mat> split_mats;
-  for (int i = 0; i < batch.size[0]; i++) {
-    cv::Range ranges[4];
-    ranges[0] = cv::Range(i, i + 1);
-    ranges[1] = cv::Range::all();
-    ranges[2] = cv::Range::all();
-    ranges[3] = cv::Range::all();
-
-    cv::Mat sub_mat = batch(ranges);
-    split_mats.push_back(sub_mat);
-  }
-
-  return split_mats;
 }

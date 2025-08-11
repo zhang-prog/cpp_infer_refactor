@@ -12,21 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include <iostream>
-#include <memory>
-#include <opencv2/opencv.hpp>
-#include <string>
-#include <unordered_map>
-
-#include "absl/status/status.h"
-#include "absl/status/statusor.h"
-
-class BaseProcessor {
- public:
-  BaseProcessor() = default;
-  virtual ~BaseProcessor() = default;
-  virtual absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input, const void* param_ptr = nullptr) const = 0;
-};
+#include "base_pipeline.h"

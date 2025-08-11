@@ -20,12 +20,13 @@
 
 #include "base_batch_sampler.h"
 #include "src/common/image_batch_sampler.h"
+#include "src/utils/ilogger.h"
 #include "src/utils/pp_option.h"
 #include "src/utils/utility.h"
 
 BasePredictor::BasePredictor(
     const std::string& model_dir, const std::string& device,
-    const bool enable_mkldnn, int batch_size,
+    const std::string& precision, const bool enable_mkldnn, int batch_size,
     const std::unordered_map<std::string, std::string>& config,
     const std::string sampler_type)
     : model_dir_(model_dir),
@@ -37,11 +38,11 @@ BasePredictor::BasePredictor(
   }
   auto status_build = BuildBatchSampler();
   if (!status_build.ok()) {
-    std::cerr << "Build sampler fail: " << status_build.ToString();
+    INFOE("Build sampler fail: %s", status_build.ToString().c_str());
   }
   auto model_name = config_.GetString(std::string("Global.model_name"));
   if (!model_name.ok()) {
-    std::cerr << model_name.status().ToString();
+    INFOE(model_name.status().ToString().c_str());
   }
   model_name_ = model_name.value();
   pp_option_ptr_.reset(new PaddlePredictorOption());
@@ -58,39 +59,41 @@ BasePredictor::BasePredictor(
   }
   auto result = pp_option_ptr_->SetDeviceType(device_type);
   if (!result.ok()) {
-    std::cerr << result.ToString() << std::endl;
+    INFOE("Failed to set device : %s", result.ToString().c_str());
     return;
   }
   result = pp_option_ptr_->SetDeviceId(device_id);
   if (!result.ok()) {
-    std::cerr << "Failed to set device id: " << result.ToString() << std::endl;
+    INFOE("Failed to set device id: %s", result.ToString().c_str());
     return;
   }
   if (enable_mkldnn) {
+    if (precision == "fp16") {
+      INFOW(
+          "When MKLDNN is enabled, FP16 precision is not supported.The "
+          "computation will proceed with FP32 instead.");
+    }
     result = pp_option_ptr_->SetRunMode("mkldnn");
     if (!result.ok()) {
-      std::cerr << "Failed to set run mode: " << result.ToString() << std::endl;
+      INFOE("Failed to set run mode: %s", result.ToString().c_str());
+      return;
+    }
+  } else if (precision == "fp16") {
+    if (precision == "fp16") {
+      result = pp_option_ptr_->SetRunMode("paddle_fp16");
+    }
+    if (!result.ok()) {
+      INFOE("Failed to set run mode: %s", result.ToString().c_str());
       return;
     }
   }
-  std::cout << pp_option_ptr_->DebugString();
+  INFO(pp_option_ptr_->DebugString().c_str());
 }
 
 std::vector<std::unique_ptr<BaseCVResult>> BasePredictor::Predict(
     const std::string& input) {
-  input_path_ = input;
-  std::vector<std::unique_ptr<BaseCVResult>> result = {};
-  auto batches = batch_sampler_ptr_->Apply(input);
-  if (!batches.ok()) {
-    std::cerr << "Get sample fail : " << batches.status().ToString();
-  }
-  for (auto& batch_data : batches.value()) {
-    auto predictions = Process(batch_data);
-    for (auto& prediction : predictions) {
-      result.emplace_back(std::move(prediction));
-    }
-  }
-  return result;
+  std::vector<std::string> inputs = {input};
+  return Predict(inputs);
 }
 
 const PaddlePredictorOption& BasePredictor::PPOption() {

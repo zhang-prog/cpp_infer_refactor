@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef YAML_CONFIG_H_
-#define YAML_CONFIG_H_
+#pragma once
 
 #include <yaml-cpp/yaml.h>
 
@@ -23,6 +22,15 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "utility.h"
+
+enum VectorType { VECTOR_INT, VECTOR_FLOAT, VECTOR_STRING, VECTOR_UNKNOWN };
+
+struct VectorVariant {
+  VectorType type;
+  std::vector<int> vec_int;
+  std::vector<float> vec_float;
+  std::vector<std::string> vec_string;
+};
 
 class YamlConfig {
  public:
@@ -38,10 +46,16 @@ class YamlConfig {
   std::unordered_map<std::string, std::string> PostProcessOpInfo() {
     return post_process_op_info_;
   };
-  absl::StatusOr<std::string> GetString(const std::string& key) const;
-  absl::StatusOr<int> GetInt(const std::string& key) const;
+  absl::StatusOr<std::string> GetString(
+      const std::string& key, const std::string& default_value = "") const;
+  absl::StatusOr<int> GetInt(const std::string& key, int default_value) const;
+  absl::StatusOr<float> GetFloat(const std::string& key,
+                                 float default_value) const;
   absl::StatusOr<double> GetDouble(const std::string& key) const;
-  absl::StatusOr<bool> GetBool(const std::string& key) const;
+  absl::StatusOr<bool> GetBool(const std::string& key,
+                               bool default_value) const;
+  absl::StatusOr<std::unordered_map<std::string, std::string>> GetSubModule(
+      const std::string& key) const;
 
   absl::Status HasKey(const std::string& key) const;
 
@@ -53,6 +67,8 @@ class YamlConfig {
   std::string ConfigYamlPath() { return config_yaml_path_; };
   absl::Status GetConfigYamlPaths(const std::string& model_dir);
   absl::Status LoadYamlFile();
+  bool FindKey(const std::string& key);
+  static VectorVariant SmartParseVector(const std::string& input);
 
  private:
   std::string config_yaml_path_;
@@ -61,5 +77,3 @@ class YamlConfig {
   std::unordered_map<std::string, std::string> pre_process_op_info_;
   std::unordered_map<std::string, std::string> post_process_op_info_;
 };
-
-#endif  // YAML_CONFIG_H_

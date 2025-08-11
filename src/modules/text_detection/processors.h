@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PROCESSORS_H_
-#define PROCESSORS_H_
+#pragma once
 
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -25,33 +24,17 @@
 #include "absl/status/statusor.h"
 #include "src/utils/func_register.h"
 
-class ReadImage : public BaseProcessor {
- public:
-  enum class Format { BGR, RGB, GRAY };
-
-  explicit ReadImage(const std::string& format);
-
-  ReadImage(const ReadImage&) = delete;
-  ReadImage& operator=(const ReadImage&) = delete;
-
-  absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input,
-      const void* param_ptr = nullptr) const override;
-
- private:
-  static absl::StatusOr<Format> StringToFormat(const std::string& format);
-  Format format_;
-};
-
 struct DetResizeForTestParam {
   int limit_side_len = -1;
   std::string limit_type = std::string("");
   int max_side_limit = -1;
+  std::vector<int> input_shape = {};
+  std::vector<int> image_shape = {};
 };
 
 class DetResizeForTest : public BaseProcessor {
  public:
-  DetResizeForTest(int resize_long = 960, std::vector<int> input_shape = {},
+  DetResizeForTest(int resize_long = -1, std::vector<int> input_shape = {},
                    std::vector<int> image_shape = {}, int limit_side_len = 960,
                    std::string limit_type = std::string("max"),
                    int max_side_limit = 4000);
@@ -84,41 +67,6 @@ class DetResizeForTest : public BaseProcessor {
   absl::StatusOr<cv::Mat> ResizeImageType2(const cv::Mat& img) const;
   absl::StatusOr<cv::Mat> ResizeImageType3(const cv::Mat& img) const;
   static constexpr int INPUTSHAPE = 3;
-};
-
-class NormalizeImage : public BaseProcessor {
- public:
-  NormalizeImage(double scale = 1.0 / 255.0,
-                 const std::vector<double>& mean = {0.485, 0.456, 0.406},
-                 const std::vector<double>& std = {0.229, 0.224, 0.225});
-
-  absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input, const void* param = nullptr) const override;
-
- private:
-  std::vector<double> alpha_;
-  std::vector<double> beta_;
-
-  absl::StatusOr<cv::Mat> Normalize(const cv::Mat& img) const;
-  NormalizeImage(const NormalizeImage&) = delete;
-  NormalizeImage& operator=(const NormalizeImage&) = delete;
-  static constexpr int CHANNEL = 3;
-};
-
-class ToCHWImage : public BaseProcessor {
- public:
-  absl::StatusOr<std::vector<cv::Mat>> operator()(
-      const std::vector<cv::Mat>& imgs_batch);
-  absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input, const void* param = nullptr) const override;
-};
-
-class ToBatch : public BaseProcessor {
- public:
-  absl::StatusOr<std::vector<cv::Mat>> operator()(
-      const std::vector<cv::Mat>& imgs) const;
-  absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input, const void* param = nullptr) const override;
 };
 
 class DBPostProcess {
@@ -165,15 +113,10 @@ class DBPostProcess {
       const std::vector<cv::Point2f>& contour);
 
   float BoxScoreFast(const cv::Mat& bitmap,
-                     const std::vector<cv::Point2f>& box);
+                     const std::vector<cv::Point2f>& contour);
 
   float BoxScoreSlow(const cv::Mat& bitmap,
                      const std::vector<cv::Point2f>& contour);
-
-  absl::StatusOr<std::vector<cv::Mat>> SplitBatch(const cv::Mat& batch);
-  cv::Mat extract2DFromBitmap(const cv::Mat& bitmap, int ymin, int ymax,
-                              int xmin, int xmax, int batch_idx = 0,
-                              int channel_idx = 0);
 
  private:
   float thresh_;
@@ -185,5 +128,3 @@ class DBPostProcess {
   std::string score_mode_;
   std::string box_type_;
 };
-
-#endif

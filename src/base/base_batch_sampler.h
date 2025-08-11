@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef BASE_BATCH_SAMPLER_H_
-#define BASE_BATCH_SAMPLER_H_
+#pragma once
 
 #include <opencv2/opencv.hpp>
 #include <string>
@@ -45,9 +44,22 @@ class BaseBatchSampler {
 
   virtual absl::StatusOr<std::vector<std::vector<cv::Mat>>> SampleFromVector(
       const std::vector<std::string>& inputs) = 0;
+  std::vector<std::string> InputPath() { return input_path_; };
+
+  virtual absl::StatusOr<std::vector<std::vector<cv::Mat>>> SampleFromMatVector(
+      const std::vector<cv::Mat>& inputs) = 0;
+
+  absl::StatusOr<std::vector<std::vector<std::string>>>
+  SampleFromStringToStringVector(const std::string& input);
+  absl::StatusOr<std::vector<std::vector<std::string>>>
+  SampleFromVectorToStringVector(const std::vector<std::string>& input);
+
+  absl::StatusOr<std::vector<std::string>> GetFilesList(
+      const std::string& path);
 
  protected:
   int batch_size_ = 1;
+  std::vector<std::string> input_path_;
 };
 
 template <typename T>
@@ -69,4 +81,9 @@ BaseBatchSampler::Sample<std::vector<std::string>>(
   return SampleFromVector(input);
 }
 
-#endif  // BASE_BATCH_SAMPLER_H_
+template <>
+inline absl::StatusOr<std::vector<std::vector<cv::Mat>>>
+BaseBatchSampler::Sample<std::vector<cv::Mat>>(
+    const std::vector<cv::Mat>& input) {
+  return SampleFromMatVector(input);
+}

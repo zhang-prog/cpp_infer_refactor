@@ -14,19 +14,22 @@
 
 #pragma once
 
-#include <iostream>
-#include <memory>
 #include <opencv2/opencv.hpp>
 #include <string>
-#include <unordered_map>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "src/utils/func_register.h"
 
-class BaseProcessor {
+class DocTrPostProcess {
  public:
-  BaseProcessor() = default;
-  virtual ~BaseProcessor() = default;
-  virtual absl::StatusOr<std::vector<cv::Mat>> Apply(
-      std::vector<cv::Mat>& input, const void* param_ptr = nullptr) const = 0;
+  explicit DocTrPostProcess(double scale = 255.0f);
+
+  absl::StatusOr<std::vector<cv::Mat> > Apply(const cv::Mat& preds) const;
+
+  absl::StatusOr<cv::Mat> Process(cv::Mat& pred_data) const;
+
+ private:
+  double scale_;
 };
