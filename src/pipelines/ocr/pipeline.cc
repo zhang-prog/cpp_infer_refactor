@@ -15,8 +15,8 @@
 #include "pipeline.h"
 
 #include "result.h"
-OCRPipeline::OCRPipeline(const std::string& model_dir,
-                         const OCRPipelineParams& params)
+_OCRPipeline::_OCRPipeline(const std::string& model_dir,
+                           const OCRPipelineParams& params)
     : BasePipeline(model_dir), params_(params), config_(params.config) {
   if (params.config.empty()) {
     auto config_path = Utility::GetDefaultConfig("OCR");
@@ -55,7 +55,7 @@ OCRPipeline::OCRPipeline(const std::string& model_dir,
     params.config = result_doc_preprocessor_config.value();
 
     doc_preprocessors_pipeline_ =
-        CreatePipeline<DocPreprocessorPipeline>(model_dir, params);
+        CreatePipeline<_DocPreprocessorPipeline>(model_dir, params);
   }
   auto result_use_textline_orientation =
       config_.GetBool("use_textline_orientation", true);
@@ -185,7 +185,7 @@ OCRPipeline::OCRPipeline(const std::string& model_dir,
       new ImageBatchSampler(1));  //** pipeline batch_size
 };
 
-absl::StatusOr<std::vector<cv::Mat>> OCRPipeline::RotateImage(
+absl::StatusOr<std::vector<cv::Mat>> _OCRPipeline::RotateImage(
     const std::vector<cv::Mat>& image_array_list,
     const std::vector<int>& rotate_angle_list) {
   if (image_array_list.size() != rotate_angle_list.size()) {
@@ -216,16 +216,16 @@ absl::StatusOr<std::vector<cv::Mat>> OCRPipeline::RotateImage(
   return rotated_images;
 }
 
-std::unordered_map<std::string, bool> OCRPipeline::GetModelSettings() const {
+std::unordered_map<std::string, bool> _OCRPipeline::GetModelSettings() const {
   std::unordered_map<std::string, bool> model_settings = {};
   model_settings["use_doc_preprocessor"] = use_doc_preprocessor_;
   model_settings["use_textline_orientation"] = use_textline_orientation_;
   return model_settings;
 }
 
-std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
+std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
     const std::vector<std::string>& input) {
-  auto model_setting = GetModelSettings();
+  auto model_settings = GetModelSettings();
   auto batches = batch_sampler_ptr_->Apply(input);
   auto batches_string =
       batch_sampler_ptr_->SampleFromVectorToStringVector(input);
@@ -240,6 +240,7 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
   int index = 0;
   std::vector<cv::Mat> origin_image = {};
   std::vector<std::unique_ptr<BaseCVResult>> base_results = {};
+  pipeline_result_vec_.clear();
   for (int i = 0; i < batches.value().size(); i++) {
     origin_image.reserve(batches.value()[i].size());
     for (const auto& mat : batches.value()[i]) {
@@ -250,7 +251,7 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
     if (use_doc_preprocessor_) {
       doc_preprocessors_pipeline_->Predict(batches_string.value()[i]);
       doc_preprocessors_pipeline_results =
-          static_cast<DocPreprocessorPipeline*>(
+          static_cast<_DocPreprocessorPipeline*>(
               doc_preprocessors_pipeline_.get())
               ->PipelineResult();
     } else {
@@ -285,12 +286,11 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
     }
     std::vector<OCRPipelineResult> results(
         doc_preprocessor_pipeline_images.size());
-    for (int k = 0; k < results.size(); k++) {
-      results[k].input_path = input_path[k];
+    for (int k = 0; k < results.size(); k++, index++) {
+      results[k].input_path = input_path[index];
       results[k].doc_preprocessor_res = doc_preprocessors_pipeline_results[k];
       results[k].dt_polys = dt_polys_list[k];
-      results[k].model_setting = model_setting;
-      results[k].model_setting = model_setting;
+      results[k].model_settings = model_settings;
       results[k].text_det_params = text_det_params_;
       results[k].text_type = text_type_;
       results[k].text_rec_score_thresh = text_rec_score_thresh_;
@@ -316,7 +316,7 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
         all_subs_of_imgs_copy.push_back(item.clone());
       }
       std::vector<int> angles = {};
-      if (model_setting["use_textline_orientation"]) {
+      if (model_settings["use_textline_orientation"]) {
         textline_orientation_model_->Predict(all_subs_of_imgs_copy);
         auto textline_orientation_model_results =
             static_cast<ClasPredictor*>(textline_orientation_model_.get())
@@ -367,6 +367,7 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
           sorted_subs_of_img.push_back(all_subs_of_img[item.first]);
         }
         text_rec_model_->Predict(sorted_subs_of_img);
+        cv::imwrite("num_1,.jpg", sorted_subs_of_img[0]);
         auto text_rec_model_results =
             static_cast<TextRecPredictor*>(text_rec_model_.get())
                 ->PredictorResult();
@@ -394,4 +395,43 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
     }
   }
   return base_results;
+}
+
+std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
+    const std::vector<std::string>& input) {
+  batch_sampler_ptr_ =
+      std::unique_ptr<BaseBatchSampler>(new ImageBatchSampler(1));
+  auto nomeaning = batch_sampler_ptr_->Apply(input);
+  int input_num = nomeaning.value().size();
+  int infer_batch_num = input_num / thread_num_;
+  auto status = batch_sampler_ptr_->SetBatchSize(infer_batch_num);
+  if (!status.ok()) {
+    INFOE("Set batch size fail : %s", status.ToString().c_str());
+  }
+  auto infer_batch_data =
+      batch_sampler_ptr_->SampleFromVectorToStringVector(input);
+  if (!infer_batch_data.ok()) {
+    INFOE("Get infer batch data fail : %s",
+          infer_batch_data.status().ToString().c_str());
+  }
+  std::vector<std::unique_ptr<BaseCVResult>> results = {};
+  results.reserve(input_num);
+  for (auto& infer_data : infer_batch_data.value()) {
+    auto status =
+        AutoParallelSimpleInferencePipeline::PredictThread(infer_data);
+    if (!status.ok()) {
+      INFOE("Infer fail : %s", status.ToString().c_str());
+    }
+  }
+  for (int i = 0; i < infer_batch_data.value().size(); i++) {
+    auto infer_data_result = GetResult();
+    if (!infer_data_result.ok()) {
+      INFOE("Get infer result fail : %s",
+            infer_batch_data.status().ToString().c_str());
+    }
+    results.insert(results.end(),
+                   std::make_move_iterator(infer_data_result.value().begin()),
+                   std::make_move_iterator(infer_data_result.value().end()));
+  }
+  return results;
 }

@@ -46,19 +46,20 @@ struct DocPreprocessorPipelineParams {
   bool use_doc_unwarping = false;
 };
 
-class DocPreprocessorPipeline : public BasePipeline {
+class _DocPreprocessorPipeline : public BasePipeline {
  public:
-  explicit DocPreprocessorPipeline(
+  explicit _DocPreprocessorPipeline(
       const std::string& model_dir, std::string device = "cpu",
       const std::string& precision = "fp32", bool enable_mkldnn = false,
       const std::unordered_map<std::string, std::string>& config = {},
       bool use_doc_orientation_classify = false,
       bool use_doc_unwarping = false);
-  explicit DocPreprocessorPipeline(const std::string& model_dir,
-                                   const DocPreprocessorPipelineParams& params);
-  virtual ~DocPreprocessorPipeline() = default;
+  explicit _DocPreprocessorPipeline(
+      const std::string& model_dir,
+      const DocPreprocessorPipelineParams& params);
+  virtual ~_DocPreprocessorPipeline() = default;
 
-  DocPreprocessorPipeline() = delete;
+  _DocPreprocessorPipeline() = delete;
 
   std::vector<std::unique_ptr<BaseCVResult>> Predict(
       const std::vector<std::string>& input) override;
@@ -84,15 +85,15 @@ class DocPreprocessorPipeline : public BasePipeline {
   std::vector<DocPreprocessorPipelineResult> pipeline_result_vec_;
 };
 
-class _DocPreprocessorPipeline
+class DocPreprocessorPipeline
     : public AutoParallelSimpleInferencePipeline<
-          DocPreprocessorPipeline, DocPreprocessorPipelineParams,
+          _DocPreprocessorPipeline, DocPreprocessorPipelineParams,
           std::vector<std::string>,
           std::vector<std::unique_ptr<BaseCVResult>>> {
  public:
-  _DocPreprocessorPipeline(const std::string& model_dir,
-                           const DocPreprocessorPipelineParams& params,
-                           int thread_num = 1)
+  DocPreprocessorPipeline(const std::string& model_dir,
+                          const DocPreprocessorPipelineParams& params,
+                          int thread_num = 1)
       : AutoParallelSimpleInferencePipeline(model_dir, params, thread_num),
         thread_num_(thread_num){};
 

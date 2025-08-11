@@ -43,7 +43,7 @@ struct OCRPipelineResult {
   std::string input_path = "";
   DocPreprocessorPipelineResult doc_preprocessor_res;
   std::vector<std::vector<cv::Point2f>> dt_polys = {};
-  std::unordered_map<std::string, bool> model_setting = {};
+  std::unordered_map<std::string, bool> model_settings = {};
   TextDetParams text_det_params;
   std::string text_type = "";
   float text_rec_score_thresh = 0.0;
@@ -75,12 +75,12 @@ struct OCRPipelineParams {
   std::string lang = "";
 };
 
-class OCRPipeline : public BasePipeline {
+class _OCRPipeline : public BasePipeline {
  public:
-  explicit OCRPipeline(const std::string& model_dir,
-                       const OCRPipelineParams& params);
-  virtual ~OCRPipeline() = default;
-  OCRPipeline() = delete;
+  explicit _OCRPipeline(const std::string& model_dir,
+                        const OCRPipelineParams& params);
+  virtual ~_OCRPipeline() = default;
+  _OCRPipeline() = delete;
 
   std::vector<std::unique_ptr<BaseCVResult>> Predict(
       const std::vector<std::string>& input) override;
@@ -116,4 +116,22 @@ class OCRPipeline : public BasePipeline {
   float text_rec_score_thresh_ = 0.0;
   std::string text_type_;
   TextDetParams text_det_params_;
+};
+
+class OCRPipeline
+    : public AutoParallelSimpleInferencePipeline<
+          _OCRPipeline, OCRPipelineParams, std::vector<std::string>,
+          std::vector<std::unique_ptr<BaseCVResult>>> {
+ public:
+  OCRPipeline(const std::string& model_dir, const OCRPipelineParams& params,
+              int thread_num = 1)
+      : AutoParallelSimpleInferencePipeline(model_dir, params, thread_num),
+        thread_num_(thread_num){};
+
+  std::vector<std::unique_ptr<BaseCVResult>> Predict(
+      const std::vector<std::string>& input) override;
+
+ private:
+  int thread_num_;
+  std::unique_ptr<BaseBatchSampler> batch_sampler_ptr_;
 };

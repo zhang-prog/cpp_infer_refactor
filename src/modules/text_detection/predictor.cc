@@ -82,7 +82,6 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   if (!batch_raw_imgs.ok()) {
     INFOE(batch_raw_imgs.status().ToString().c_str());
   }
-  Utility::WriteBatchMatToTxt_X(batch_raw_imgs.value()[0], "read_det.txt");
   std::vector<int> origin_shape = {batch_raw_imgs.value()[0].rows,
                                    batch_raw_imgs.value()[0].cols};
   DetResizeForTestParam resize_param;
@@ -94,7 +93,6 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   if (!batch_imgs.ok()) {
     INFOE(batch_imgs.status().ToString().c_str());
   }
-  Utility::WriteBatchMatToTxt_X(batch_imgs.value()[0], "resize_det.txt");
   auto batch_imgs_normalize =
       pre_op_.at("Normalize")->Apply(batch_imgs.value());
   if (!batch_imgs_normalize.ok()) {
@@ -111,8 +109,6 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   if (!batch_imgs_to_batch.ok()) {
     INFOE(batch_imgs_to_batch.status().ToString().c_str());
   }
-  Utility::WriteBatchMatToTxt_X(batch_imgs_to_batch.value()[0],
-                                "to_batch_det.txt");
   auto infer_result = infer_ptr_->Apply(batch_imgs_to_batch.value());
   if (!infer_result.ok()) {
     INFOE(infer_result.status().ToString().c_str());

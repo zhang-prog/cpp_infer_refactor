@@ -416,7 +416,8 @@ absl::Status Utility::CreateDirectoryForFile(const std::string& filePath) {
 }
 
 absl::StatusOr<std::string> Utility::SmartCreateDirectoryForImage(
-    const std::string& save_path, const std::string& input_path) {
+    const std::string& save_path, const std::string& input_path,
+    const std::string& suffix) {
   std::string full_path = save_path;
   auto status = CreateDirectoryForFile(save_path);
   if (!status.ok()) {
@@ -429,9 +430,9 @@ absl::StatusOr<std::string> Utility::SmartCreateDirectoryForImage(
         (pos == std::string::npos) ? file_path : file_path.substr(pos + 1);
     size_t dot_pos = file_name.find_last_of('.');
     if (dot_pos == std::string::npos) {
-      file_name = file_name + "_res";
+      file_name = file_name + suffix;
     } else {
-      file_name.insert(dot_pos, "_res");
+      file_name.insert(dot_pos, suffix);
     }
     if (save_path.back() != PATH_SEPARATOR) {
       full_path += PATH_SEPARATOR;
@@ -442,8 +443,9 @@ absl::StatusOr<std::string> Utility::SmartCreateDirectoryForImage(
 }
 
 absl::StatusOr<std::string> Utility::SmartCreateDirectoryForJson(
-    const std::string& save_path, const std::string& input_path) {
-  auto full_path = SmartCreateDirectoryForImage(save_path, input_path);
+    const std::string& save_path, const std::string& input_path,
+    const std::string& suffix) {
+  auto full_path = SmartCreateDirectoryForImage(save_path, input_path, suffix);
   if (!full_path.ok()) {
     return full_path.status();
   }

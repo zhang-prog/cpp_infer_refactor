@@ -82,8 +82,11 @@ class Utility {
   static absl::Status CreateDirectoryRecursive(const std::string& path);
   static absl::Status CreateDirectoryForFile(const std::string& filePath);
   static absl::StatusOr<std::string> SmartCreateDirectoryForImage(
-      const std::string& save_path, const std::string& input_path);
+      const std::string& save_path, const std::string& input_path,
+      const std::string& suffix = "_res");
   static absl::StatusOr<std::string> SmartCreateDirectoryForJson(
-      const std::string& save_path, const std::string& input_path);
+      const std::string& save_path, const std::string& input_path,
+      const std::string& suffix = "_res");
+
   static absl::StatusOr<int> StringToInt(std::string s);
 };

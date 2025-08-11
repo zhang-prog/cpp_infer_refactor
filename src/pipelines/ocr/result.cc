@@ -40,13 +40,11 @@ void OCRResult::SaveToImg(const std::string& save_path) {
 
   if (image.empty()) {
     INFOE("Input image is empty.");
+    return;
   }
 
   int h = image.rows;
   int w = image.cols;
-
-  // cv::Mat image_rgb = image;
-  // cv::cvtColor(image, image_rgb, cv::COLOR_BGR2RGB);
 
   cv::Mat img_left = image.clone();
 
@@ -54,94 +52,280 @@ void OCRResult::SaveToImg(const std::string& save_path) {
 
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_int_distribution<> dis(100, 100);
+  std::uniform_int_distribution<> dis(0, 255);
 
   for (size_t i = 0; i < boxes.size(); ++i) {
-    const auto& box = boxes[i];
+    auto& box = boxes[i];
     const auto& box_float = boxes_float[i];
     const auto& text = texts[i];
 
     cv::Scalar color(dis(gen), dis(gen), dis(gen));
 
     if (box.size() > 4) {
-      cv::fillPoly(img_left, std::vector<std::vector<cv::Point>>{box}, color);
-      // Further processing for rotated rectangles can be added here
+      const std::vector<std::vector<cv::Point>> polygons{box};
+      cv::fillPoly(img_left, polygons, color);
+      cv::polylines(img_left, polygons, true, color, 8);
+      box = GetMinareaRect(box);
+      std::vector<int> ys;
+      for (const auto& pt : box) ys.push_back(pt.y);
+      int min_y = *std::min_element(ys.begin(), ys.end());
+      int max_y = *std::max_element(ys.begin(), ys.end());
+      int height = static_cast<int>(0.5 * (max_y - min_y));
+      double mean_y = std::accumulate(ys.begin(), ys.end(), 0.0) / ys.size();
+      if (box.size() >= 4) {
+        box[0].y = static_cast<int>(mean_y);
+        box[1].y = static_cast<int>(mean_y);
+        box[2].y = static_cast<int>(mean_y + std::min(20, height));
+        box[3].y = static_cast<int>(mean_y + std::min(20, height));
+      }
     } else {
       cv::fillPoly(img_left, std::vector<std::vector<cv::Point>>{box}, color);
     }
 
     cv::Mat img_right_text = DrawBoxTextFine(
         cv::Size(w, h), box_float, text);  // Placeholder for drawing text
-    cv::imwrite("img_right_text.jpg", img_right_text);
     cv::polylines(img_right_text, box, true, color, 1);
-
-    cv::Mat gray, mask;
-    cv::cvtColor(img_right_text, gray, cv::COLOR_BGR2GRAY);
-    cv::threshold(gray, mask, 128, 255, cv::THRESH_BINARY_INV);
-    img_right_text.copyTo(img_right, mask);
+    cv::bitwise_and(img_right, img_right_text, img_right);
   }
 
   cv::Mat blended;
   cv::addWeighted(image, 0.5, img_left, 0.5, 0, blended);
 
-  cv::Mat img_show(h, w * 2, CV_8UC3, cv::Scalar(255, 255, 255));
-  blended.copyTo(img_show(cv::Rect(0, 0, w, h)));
-  img_right.copyTo(img_show(cv::Rect(w, 0, w, h)));
+  cv::Mat ocr_res_image(h, w * 2, CV_8UC3, cv::Scalar(255, 255, 255));
+  blended.copyTo(ocr_res_image(cv::Rect(0, 0, w, h)));
+  img_right.copyTo(ocr_res_image(cv::Rect(w, 0, w, h)));
 
-  auto model_setting = pipeline_result_.model_setting;
+  auto model_settings = pipeline_result_.model_settings;
   std::unordered_map<std::string, cv::Mat> res_img_dict;
-  res_img_dict["ocr_res_img"] = img_show;
-  if (model_setting["useDocPreprocessor"]) {
-    res_img_dict["useDocPreprocessor"] =
-        pipeline_result_.doc_preprocessor_res.image_all;
-  }
+  res_img_dict["ocr_res_img"] = ocr_res_image;
 
-  cv::imwrite("gsj.jpg", img_show);
+  auto ocr_path = Utility::SmartCreateDirectoryForImage(
+      save_path, pipeline_result_.input_path, "_ocr_res_img");
+  if (!ocr_path.ok()) {
+    INFOE(ocr_path.status().ToString().c_str());
+  }
+  auto doc_pre_path = Utility::SmartCreateDirectoryForImage(
+      save_path, pipeline_result_.input_path, "_doc_preprocessor_res");
+  if (!doc_pre_path.ok()) {
+    INFOE(doc_pre_path.status().ToString().c_str());
+  }
+  cv::imwrite(ocr_path.value(), ocr_res_image);
+  if (model_settings["use_doc_preprocessor"]) {
+    int h1 = pipeline_result_.doc_preprocessor_res.input_image.size[0];
+    int w1 = pipeline_result_.doc_preprocessor_res.input_image.size[1];
+    int h2 = pipeline_result_.doc_preprocessor_res.rotate_image.size[0];
+    int w2 = pipeline_result_.doc_preprocessor_res.rotate_image.size[1];
+    int h3 = pipeline_result_.doc_preprocessor_res.output_image.size[0];
+    int w3 = pipeline_result_.doc_preprocessor_res.output_image.size[1];
+    int h_all = std::max(h1, std::max(h2, h3));
+    int total_w = w1 + w2 + w3;
+
+    cv::Mat doc_pre_res_image(h_all, total_w, CV_8UC3,
+                              cv::Scalar(255, 255, 255));
+
+    pipeline_result_.doc_preprocessor_res.input_image.copyTo(
+        doc_pre_res_image(cv::Rect(0, 0, w1, h1)));
+    pipeline_result_.doc_preprocessor_res.rotate_image.copyTo(
+        doc_pre_res_image(cv::Rect(w1, 0, w2, h2)));
+    pipeline_result_.doc_preprocessor_res.output_image.copyTo(
+        doc_pre_res_image(cv::Rect(w1 + w2, 0, w3, h3)));
+    cv::imwrite(doc_pre_path.value(), doc_pre_res_image);
+    res_img_dict["doc_preprocessor_res"] = doc_pre_res_image;
+  }
 }
 
-cv::Mat OCRResult::DrawBoxTextFine(const cv::Size& imgSize,
+cv::Mat OCRResult::DrawBoxTextFine(const cv::Size& img_size,
                                    const std::vector<cv::Point2f>& box,
                                    const std::string& txt) {
-  auto calculateDistance = [](const cv::Point2f& p1, const cv::Point2f& p2) {
-    return std::sqrt(std::pow(p1.x - p2.x, 2) + std::pow(p1.y - p2.y, 2));
-  };
+  int box_height = cv::norm(box[0] - box[3]);
+  int box_width = cv::norm(box[0] - box[1]);
+  auto ft2 = cv::freetype::createFreeType2();
+  ft2->loadFontData(
+      "/workspace/cpp_infer_refactor/models/PP-OCRv5_server_rec/simfang.ttf",
+      0);
 
-  int boxHeight = static_cast<int>(calculateDistance(box[0], box[3]));
-  int boxWidth = static_cast<int>(calculateDistance(box[0], box[1]));
+  bool vertical_mode = box_height > 2 * box_width && box_height > 30;
+  int n = std::max(int(txt.size()), 1);
 
-  cv::Mat imgText = cv::Mat::zeros(boxHeight, boxWidth, CV_8UC3);
-  imgText.setTo(cv::Scalar(255, 255, 255));
+  int font_height = 10;
+  if (vertical_mode) {
+    font_height = std::max(int(box_height / (n * 1.2)), 10);
+  } else {
+    font_height = std::max(int(box_height * 0.8), 10);
+  }
+  cv::Mat img_text(box_height, box_width, CV_8UC3, cv::Scalar(255, 255, 255));
+  int x = 0, y = 0;
 
   if (!txt.empty()) {
-    int fontFace = cv::FONT_HERSHEY_SIMPLEX;
-    double fontScale = 0.5;
-    int thickness = 1;
-    int baseline = 0;
-
-    // 计算文本尺寸以居中
-    cv::Size textSize =
-        cv::getTextSize(txt, fontFace, fontScale, thickness, &baseline);
-    cv::Point textOrg((boxWidth - textSize.width) / 2,
-                      (boxHeight + textSize.height) / 2);
-
-    // 绘制文本
-    cv::putText(imgText, txt, textOrg, fontFace, fontScale, cv::Scalar(0, 0, 0),
-                thickness, cv::LINE_AA);
+    if (vertical_mode) {
+      DrawVerticalText(ft2, img_text, txt, x, y, font_height,
+                       cv::Scalar(0, 0, 0));
+    } else {
+      int baseline = 0;
+      cv::Size textsize = ft2->getTextSize(txt, font_height, -1, &baseline);
+      x = (box_width - textsize.width) / 2;
+      y = (box_height + textsize.height) / 2 - baseline;
+      ft2->putText(img_text, txt, cv::Point(x, y), font_height,
+                   cv::Scalar(0, 0, 0), -1, cv::LINE_AA, true);
+    }
   }
+  std::vector<cv::Point2f> src_pts = {{0, 0},
+                                      {float(box_width), 0},
+                                      {float(box_width), float(box_height)},
+                                      {0, float(box_height)}};
+  cv::Mat M = cv::getPerspectiveTransform(src_pts, box);
 
-  // 定义透视变换的源点和目标点
-  std::vector<cv::Point2f> pts1 = {{0.0, 0.0},
-                                   {(float)boxWidth, 0.0},
-                                   {(float)boxWidth, (float)boxHeight},
-                                   {0.0, (float)boxHeight}};
-  cv::Mat M = cv::getPerspectiveTransform(pts1, box);
-
-  cv::Mat imgRightText;
-  cv::warpPerspective(imgText, imgRightText, M, imgSize, cv::INTER_NEAREST,
+  cv::Mat dst(img_size, CV_8UC3, cv::Scalar(255, 255, 255));
+  cv::warpPerspective(img_text, dst, M, img_size, cv::INTER_NEAREST,
                       cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255));
-
-  return imgRightText;
+  return dst;
 }
 
+void OCRResult::DrawVerticalText(cv::Ptr<cv::freetype::FreeType2>& ft2,
+                                 cv::Mat& img, const std::string& text, int x,
+                                 int y, int font_height, cv::Scalar color,
+                                 int line_spacing) {
+  for (size_t i = 0; i < text.length(); ++i) {
+    std::string ch = text.substr(i, 1);
+    ft2->putText(img, ch, cv::Point(x, y), font_height, color, -1, cv::LINE_AA,
+                 true);
+    int baseline = 0;
+    cv::Size size = ft2->getTextSize(ch, font_height, -1, &baseline);
+    y += size.height + line_spacing;
+  }
+}
+
+std::vector<cv::Point> OCRResult::GetMinareaRect(
+    const std::vector<cv::Point>& points) {
+  cv::RotatedRect bounding_box = cv::minAreaRect(points);
+
+  cv::Point2f boxPts[4];
+  bounding_box.points(boxPts);
+  std::vector<cv::Point2f> ptsVec(boxPts, boxPts + 4);
+
+  std::sort(
+      ptsVec.begin(), ptsVec.end(),
+      [](const cv::Point2f& a, const cv::Point2f& b) { return a.x < b.x; });
+  int index_a, index_b, index_c, index_d;
+  if (ptsVec[1].y > ptsVec[0].y) {
+    index_a = 0;
+    index_d = 1;
+  } else {
+    index_a = 1;
+    index_d = 0;
+  }
+  if (ptsVec[3].y > ptsVec[2].y) {
+    index_b = 2;
+    index_c = 3;
+  } else {
+    index_b = 3;
+    index_c = 2;
+  }
+
+  std::vector<cv::Point> box = {ptsVec[index_a], ptsVec[index_b],
+                                ptsVec[index_c], ptsVec[index_d]};
+
+  for (auto& pt : box) {
+    pt.x = static_cast<int>(std::round(pt.x));
+    pt.y = static_cast<int>(std::round(pt.y));
+  }
+
+  return box;
+}
+
+void OCRResult::SaveToJson(const std::string& save_path) const {
+  nlohmann::ordered_json j;
+  j["input_path"] = pipeline_result_.input_path;
+
+  j["page_index"] = nullptr;
+
+  j["model_settings"] = pipeline_result_.model_settings;
+
+  auto it = pipeline_result_.model_settings.find("use_doc_preprocessor");
+  if (it != pipeline_result_.model_settings.end() && it->second) {
+    nlohmann::ordered_json j_doc_pre;
+    j_doc_pre["input_path"] = pipeline_result_.doc_preprocessor_res.input_path;
+    j_doc_pre["page_index"] = nullptr;  //********
+    j_doc_pre["model_settings"] =
+        pipeline_result_.doc_preprocessor_res.model_settings;
+    j_doc_pre["angle"] = pipeline_result_.doc_preprocessor_res.angle;
+    j["doc_preprocessor_res"] = j_doc_pre;
+  }
+  json polys_json = json::array();
+  for (const auto& polygon : pipeline_result_.dt_polys) {
+    json poly_json = json::array();
+    for (const auto& point : polygon) {
+      poly_json.push_back(
+          {static_cast<int>(point.x), static_cast<int>(point.y)});
+    }
+    polys_json.push_back(poly_json);
+  }
+  j["dt_polys"] = polys_json;
+  nlohmann::ordered_json j_text_det_params;
+  j_text_det_params["limit_side_len"] =
+      pipeline_result_.text_det_params.text_det_limit_side_len;
+  j_text_det_params["limit_type"] =
+      pipeline_result_.text_det_params.text_det_limit_type;
+  j_text_det_params["thresh"] =
+      pipeline_result_.text_det_params.text_det_thresh;
+  j_text_det_params["max_side_limit"] =
+      pipeline_result_.text_det_params.text_det_max_side_limit;
+  j_text_det_params["box_thresh"] =
+      pipeline_result_.text_det_params.text_det_box_thresh;
+  j_text_det_params["unclip_ratio"] =
+      pipeline_result_.text_det_params.text_det_unclip_ratio;
+  j["text_det_params"] = j_text_det_params;
+  j["text_type"] = pipeline_result_.text_type;
+
+  if (!pipeline_result_.textline_orientation_angles.empty()) {
+    j["textline_orientation_angles"] =
+        pipeline_result_.textline_orientation_angles;
+  }
+  j["text_rec_score_thresh"] = pipeline_result_.text_rec_score_thresh;
+  j["rec_texts"] = pipeline_result_.rec_texts;
+  j["rec_scores"] = pipeline_result_.rec_scores;
+  json rec_polys_json = json::array();
+  for (const auto& polygon : pipeline_result_.rec_polys) {
+    json poly_json = json::array();
+    for (const auto& point : polygon) {
+      poly_json.push_back(
+          {static_cast<int>(point.x), static_cast<int>(point.y)});
+    }
+    rec_polys_json.push_back(poly_json);
+  }
+  j["rec_polys"] = rec_polys_json;
+
+  std::vector<std::array<int, 4>> int_vec;
+  int_vec.reserve(pipeline_result_.rec_boxes.size());
+
+  std::transform(pipeline_result_.rec_boxes.begin(),
+                 pipeline_result_.rec_boxes.end(), std::back_inserter(int_vec),
+                 [](const std::array<float, 4>& arr) {
+                   std::array<int, 4> res;
+                   for (size_t i = 0; i < 4; ++i) {
+                     res[i] = static_cast<int>(arr[i]);
+                   }
+                   return res;
+                 });
+  j["rec_boxes"] = int_vec;
+
+  absl::StatusOr<std::string> full_path;
+  if (pipeline_result_.input_path.empty()) {
+    INFOW("Input path is empty, will use output_res.json instead!");
+    full_path = Utility::SmartCreateDirectoryForJson(save_path, "output");
+  } else {
+    full_path = Utility::SmartCreateDirectoryForJson(
+        save_path, pipeline_result_.input_path);
+  }
+  if (!full_path.ok()) {
+    INFOE(full_path.status().ToString().c_str());
+  }
+  std::ofstream file(full_path.value());
+  if (file.is_open()) {
+    file << j.dump(4);
+    file.close();
+  } else {
+    INFOE("Could not open file for writing: %s", save_path.c_str());
+  }
+}
 void OCRResult::Print() const { int a = 1; }
-void OCRResult::SaveToJson(const std::string& save_path) const { int a = 1; }

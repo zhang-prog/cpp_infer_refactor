@@ -18,7 +18,7 @@
 #include "src/modules/image_classification/predictor.h"
 #include "src/modules/image_unwarping/predictor.h"
 
-DocPreprocessorPipeline::DocPreprocessorPipeline(
+_DocPreprocessorPipeline::_DocPreprocessorPipeline(
     const std::string& model_dir, const DocPreprocessorPipelineParams& params)
     : BasePipeline(model_dir), params_(params), config_(params.config) {
   if (params.config.empty()) {
@@ -119,8 +119,8 @@ DocPreprocessorPipeline::DocPreprocessorPipeline(
       new ImageBatchSampler(result_batch.value()));
 };
 
-std::vector<std::unique_ptr<BaseCVResult>> DocPreprocessorPipeline::Predict(
-    const std::vector<std::string>& input) {  //******* & or not
+std::vector<std::unique_ptr<BaseCVResult>> _DocPreprocessorPipeline::Predict(
+    const std::vector<std::string>& input) {
   auto model_setting = GetModelSettings();
   auto status = CheckModelSettingsVaild(model_setting);
   if (!status.ok()) {
@@ -137,6 +137,7 @@ std::vector<std::unique_ptr<BaseCVResult>> DocPreprocessorPipeline::Predict(
 
   std::vector<std::unique_ptr<BaseCVResult>> base_cv_result_ptr_vec = {};
   std::vector<DocPreprocessorPipelineResult> pipeline_result_vec = {};
+  pipeline_result_vec_.clear();
   for (auto& batch_data : batches.value()) {
     origin_image.reserve(batch_data.size());
     for (const auto& mat : batch_data) {
@@ -207,7 +208,7 @@ std::vector<std::unique_ptr<BaseCVResult>> DocPreprocessorPipeline::Predict(
 };
 
 // std::vector<std::unique_ptr<BaseCVResult>>
-// DocPreprocessorPipeline::Predict(const std::vector<std::string>& input){
+// _DocPreprocessorPipeline::Predict(const std::vector<std::string>& input){
 // //******* & or not
 //    auto  model_setting = GetModelSettings();
 //    auto status = CheckModelSettingsVaild(model_setting);
@@ -296,7 +297,8 @@ std::vector<std::unique_ptr<BaseCVResult>> DocPreprocessorPipeline::Predict(
 //    return base_cv_result_ptr_vec;
 // };
 
-std::unordered_map<std::string, bool> DocPreprocessorPipeline::GetModelSettings(
+std::unordered_map<std::string, bool>
+_DocPreprocessorPipeline::GetModelSettings(
     absl::optional<bool> use_doc_orientation_classify,
     absl::optional<bool> use_doc_unwarping) const {
   if (!use_doc_orientation_classify.has_value()) {
@@ -312,7 +314,7 @@ std::unordered_map<std::string, bool> DocPreprocessorPipeline::GetModelSettings(
   return model_settings;
 };
 
-absl::Status DocPreprocessorPipeline::CheckModelSettingsVaild(
+absl::Status _DocPreprocessorPipeline::CheckModelSettingsVaild(
     std::unordered_map<std::string, bool> model_settings) const {
   if (model_settings["use_doc_orientation_classify"] &&
       !use_doc_orientation_classify_) {
@@ -329,7 +331,7 @@ absl::Status DocPreprocessorPipeline::CheckModelSettingsVaild(
   return absl::OkStatus();
 }
 
-std::vector<std::unique_ptr<BaseCVResult>> _DocPreprocessorPipeline::Predict(
+std::vector<std::unique_ptr<BaseCVResult>> DocPreprocessorPipeline::Predict(
     const std::vector<std::string>& input) {
   batch_sampler_ptr_ =
       std::unique_ptr<BaseBatchSampler>(new ImageBatchSampler(1));
