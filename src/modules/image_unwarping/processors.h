@@ -12,6 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "func_register.h"
+#pragma once
 
-#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <string>
+#include <vector>
+
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "src/utils/func_register.h"
+
+class DocTrPostProcess {
+ public:
+  explicit DocTrPostProcess(double scale = 255.0f);
+
+  absl::StatusOr<std::vector<cv::Mat> > Apply(const cv::Mat& preds) const;
+
+  absl::StatusOr<cv::Mat> Process(cv::Mat& pred_data) const;
+
+ private:
+  double scale_;
+};

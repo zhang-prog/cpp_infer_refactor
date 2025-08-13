@@ -12,27 +12,44 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "include/base/base_predictor.h"
+#include "base_predictor.h"
+
+#include <yaml-cpp/yaml.h>
 
 #include <iostream>
 
-#include "absl/status/statusor.h"
-#include "include/base/base_batch_sampler.h"
-#include "include/utils/pp_option.h"
+#include "base_batch_sampler.h"
+#include "src/common/image_batch_sampler.h"
+#include "src/utils/ilogger.h"
+#include "src/utils/pp_option.h"
+#include "src/utils/utility.h"
 
 BasePredictor::BasePredictor(
-    const std::string &model_dir, const std::string &device,
-    const bool enable_mkldnn, int batch_size,
-    const std::unordered_map<std::string, std::string> &config)
-    : model_dir_(model_dir), batch_size_(batch_size), config_(config) {
+    const std::string& model_dir, const std::string& device,
+    const std::string& precision, const bool enable_mkldnn, int batch_size,
+    const std::unordered_map<std::string, std::string>& config,
+    const std::string sampler_type)
+    : model_dir_(model_dir),
+      batch_size_(batch_size),
+      config_(config),
+      sampler_type_(sampler_type) {
   if (config.empty()) {
-    config_ = LoadConfig();
+    config_ = YamlConfig(model_dir_);
   }
-  pp_option_.reset(new PaddlePredictorOption());
+  auto status_build = BuildBatchSampler();
+  if (!status_build.ok()) {
+    INFOE("Build sampler fail: %s", status_build.ToString().c_str());
+  }
+  auto model_name = config_.GetString(std::string("Global.model_name"));
+  if (!model_name.ok()) {
+    INFOE(model_name.status().ToString().c_str());
+  }
+  model_name_ = model_name.value();
+  pp_option_ptr_.reset(new PaddlePredictorOption());
 
   size_t pos = device.find(':');
-  std::string device_type;
-  int device_id;
+  std::string device_type = "";
+  int device_id = 0;
   if (pos != std::string::npos) {
     device_type = device.substr(0, pos);
     device_id = std::stoi(device.substr(pos + 1));
@@ -40,52 +57,66 @@ BasePredictor::BasePredictor(
     device_type = device;
     device_id = 0;
   }
-  auto result = pp_option_->SetDeviceType(device_type);
+  auto result = pp_option_ptr_->SetDeviceType(device_type);
   if (!result.ok()) {
-    std::cerr << result.ToString() << std::endl;
+    INFOE("Failed to set device : %s", result.ToString().c_str());
     return;
   }
-  result = pp_option_->SetDeviceId(device_id);
+  result = pp_option_ptr_->SetDeviceId(device_id);
   if (!result.ok()) {
-    std::cerr << "Failed to set device id: " << result.ToString() << std::endl;
+    INFOE("Failed to set device id: %s", result.ToString().c_str());
     return;
   }
   if (enable_mkldnn) {
-    result = pp_option_->SetRunMode("mkldnn");
+    if (precision == "fp16") {
+      INFOW(
+          "When MKLDNN is enabled, FP16 precision is not supported.The "
+          "computation will proceed with FP32 instead.");
+    }
+    result = pp_option_ptr_->SetRunMode("mkldnn");
     if (!result.ok()) {
-      std::cerr << "Failed to set run mode: " << result.ToString() << std::endl;
+      INFOE("Failed to set run mode: %s", result.ToString().c_str());
+      return;
+    }
+  } else if (precision == "fp16") {
+    if (precision == "fp16") {
+      result = pp_option_ptr_->SetRunMode("paddle_fp16");
+    }
+    if (!result.ok()) {
+      INFOE("Failed to set run mode: %s", result.ToString().c_str());
       return;
     }
   }
-  std::cout << pp_option_->DebugString();
+  INFO(pp_option_ptr_->DebugString().c_str());
 }
 
-std::vector<BaseCVResult> BasePredictor::Predict(string input) {
-    auto batches = batch_sampler_.apply(input)
-
-        batches = self.batch_sampler(input)
-        for batch_data in batches:
-            prediction = self.process(batch_data, **kwargs)
-            prediction = PredictionWrap(prediction, len(batch_data))
-            for idx in range(len(batch_data)):
-                yield self.result_class(prediction.get_by_idx(idx))
-
-
-    return {};
+std::vector<std::unique_ptr<BaseCVResult>> BasePredictor::Predict(
+    const std::string& input) {
+  std::vector<std::string> inputs = {input};
+  return Predict(inputs);
 }
 
-absl::Status BasePredictor::LoadConfig() { config_ = Yaml.load return {}; }
-
-const PaddlePredictorOption &BasePredictor::PPOption() { return *pp_option_; }
-
-std::string BasePredictor::ModelName() {
-  return config_["Global"]["model_name"];
+const PaddlePredictorOption& BasePredictor::PPOption() {
+  return *pp_option_ptr_;
 }
 
-std::string BasePredictor::ConfigPath() { return ""; }
-
-void BasePredictor::SetBatchSize(int batch_size) {}
+void BasePredictor::SetBatchSize(int batch_size) { batch_size_ = batch_size; }
 
 std::unique_ptr<PaddleInfer> BasePredictor::CreateStaticInfer() {
-  return nullptr;
+  return std::unique_ptr<PaddleInfer>(
+      new PaddleInfer(model_name_, model_dir_, MODEL_FILE_PREFIX, PPOption()));
 }
+
+absl::Status BasePredictor::BuildBatchSampler() {
+  if (SAMPLER_TYPE.count(sampler_type_) == 0) {
+    return absl::InvalidArgumentError("Unsupported sampler type !");
+  } else if (sampler_type_ == "image") {
+    batch_sampler_ptr_ =
+        std::unique_ptr<BaseBatchSampler>(new ImageBatchSampler(batch_size_));
+  }
+  return absl::OkStatus();
+}
+
+const std::unordered_set<std::string> BasePredictor::SAMPLER_TYPE = {
+    "image",
+};

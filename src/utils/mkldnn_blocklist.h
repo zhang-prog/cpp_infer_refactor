@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "func_register.h"
+#pragma once
 
-#include <iostream>
+#include <string>
+#include <unordered_set>
+namespace Mkldnn {
+
+extern const std::unordered_set<std::string> MKLDNN_BLOCKLIST;
+
+}

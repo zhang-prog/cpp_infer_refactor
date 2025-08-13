@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "include/utils/pp_option.h"
+#include "src/utils/pp_option.h"
 
 #include <algorithm>
 #include <sstream>
@@ -69,12 +69,16 @@ absl::Status PaddlePredictorOption::SetDeviceType(
         "SetDeviceType failed! Unsupported device_type: " + device_type);
   }
   device_type_ = device_type;
+  if (device_type_ == "cpu") {
+    device_id_ = 0;
+  }
   return absl::OkStatus();
 }
 
 absl::Status PaddlePredictorOption::SetDeviceId(int device_id) {
   if (device_id < 0) {
-    throw std::invalid_argument("SetDeviceId failed! device_id must be >= 0");
+    return absl::InvalidArgumentError(
+        "SetDeviceId failed! device_id must be >= 0");
   }
   device_id_ = device_id;
   return absl::OkStatus();

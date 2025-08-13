@@ -12,6 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "func_register.h"
+#pragma once
 
-#include <iostream>
+#include "pipeline.h"
+#include "src/base/base_cv_result.h"
+
+class DocPreprocessorResult : public BaseCVResult {
+ public:
+  DocPreprocessorResult(DocPreprocessorPipelineResult pipeline_result_)
+      : BaseCVResult(), pipeline_result_(pipeline_result_){};
+
+  void SaveToImg(const std::string& save_path) override;
+  void Print() const override;
+  void SaveToJson(const std::string& save_path) const override;
+  static void DrawText(cv::Mat& img, const std::string& text, int x, int y,
+                       int width);
+
+ private:
+  DocPreprocessorPipelineResult pipeline_result_;
+};

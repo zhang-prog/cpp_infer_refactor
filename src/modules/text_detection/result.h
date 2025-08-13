@@ -12,6 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "func_register.h"
+#pragma once
 
-#include <iostream>
+#include <opencv2/opencv.hpp>
+#include <vector>
+
+#include "predictor.h"
+#include "src/base/base_cv_result.h"
+
+class TextDetResult : public BaseCVResult {
+ public:
+  TextDetResult(TextDetPredictorResult predictor_result)
+      : BaseCVResult(), predictor_result_(predictor_result){};
+  // std::unordered_map<std::string, cv::Mat> ToImg() const override;
+  void SaveToImg(const std::string& save_path) override;
+  void Print() const override;
+  void SaveToJson(const std::string& save_path) const override;
+
+ private:
+  TextDetPredictorResult predictor_result_;
+};

@@ -12,6 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "func_register.h"
-
-#include <iostream>
+#include "base_pipeline.h"
