@@ -91,6 +91,10 @@ class Utility {
 
   static absl::StatusOr<int> StringToInt(std::string s);
 
-  static absl::StatusOr<std::pair<std::string, std::string>> GetOcrModelNames(
-      std::string lang = "", std::string ppocr_version = "");
+  //   static absl::StatusOr<std::pair<std::string, std::string>>
+  //   GetOcrModelInfo(
+  //       std::string lang = "", std::string ppocr_version = "");
+
+  static absl::StatusOr<std::tuple<std::string, std::string, std::string>>
+  GetOcrModelInfo(std::string lang, std::string ppocr_version);
 };

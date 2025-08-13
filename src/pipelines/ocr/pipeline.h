@@ -52,6 +52,7 @@ struct OCRPipelineResult {
   std::vector<int> textline_orientation_angles = {};
   std::vector<std::vector<cv::Point2f>> rec_polys = {};
   std::vector<std::array<float, 4>> rec_boxes = {};
+  std::string vis_fonts = "";
 };
 
 struct OCRPipelineParams {

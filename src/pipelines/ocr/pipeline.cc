@@ -367,7 +367,7 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
           sorted_subs_of_img.push_back(all_subs_of_img[item.first]);
         }
         text_rec_model_->Predict(sorted_subs_of_img);
-        cv::imwrite("num_1,.jpg", sorted_subs_of_img[0]);
+        // cv::imwrite("num_1,.jpg", sorted_subs_of_img[0]);
         auto text_rec_model_results =
             static_cast<TextRecPredictor*>(text_rec_model_.get())
                 ->PredictorResult();
@@ -381,6 +381,7 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
             results[l].rec_texts.push_back(rec_res.rec_text);
             results[l].rec_scores.push_back(rec_res.rec_score);
             results[l].rec_polys.push_back(dt_polys_list[l][sno]);
+            results[l].vis_fonts = rec_res.vis_font;
           }
         }
       }
