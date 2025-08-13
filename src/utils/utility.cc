@@ -227,7 +227,7 @@ void Utility::PrintShape(const cv::Mat& img) {
   std::cout << std::endl;
 }
 
-absl::Status Utility::CreateDirectory(const std::string& path) {
+absl::Status Utility::MyCreateDirectory(const std::string& path) {
 #ifdef _WIN32
   int ret = _mkdir(path.c_str());
 #else
@@ -242,7 +242,7 @@ absl::Status Utility::CreateDirectory(const std::string& path) {
   return absl::ErrnoToStatus(errno, "Failed to create directory: " + path);
 }
 
-absl::Status Utility::CreatePath(const std::string& path) {
+absl::Status Utility::MyCreatePath(const std::string& path) {
   std::vector<std::string> paths;
   std::string tmp;
   for (size_t i = 0; i < path.size(); ++i) {
@@ -256,7 +256,7 @@ absl::Status Utility::CreatePath(const std::string& path) {
   std::string current;
   for (size_t i = 0; i < paths.size(); ++i) {
     current += paths[i];
-    absl::Status status = CreateDirectory(current);
+    absl::Status status = MyCreateDirectory(current);
     if (!status.ok()) {
       return status;
     }
@@ -264,7 +264,7 @@ absl::Status Utility::CreatePath(const std::string& path) {
   return absl::OkStatus();
 }
 
-absl::Status Utility::CreateFile(const std::string& filepath) {
+absl::Status Utility::MyCreateFile(const std::string& filepath) {
   std::ifstream infile(filepath.c_str());
   if (infile.good()) {
     return absl::OkStatus();
@@ -362,7 +362,7 @@ bool Utility::IsImageFile(const std::string& file_path) {
   return kImgSuffixes.find(lower_ext) != kImgSuffixes.end();
 }
 
-absl::StatusOr<cv::Mat> Utility::LoadImage(const std::string& file_path) {
+absl::StatusOr<cv::Mat> Utility::MyLoadImage(const std::string& file_path) {
   cv::Mat image = cv::imread(file_path, cv::IMREAD_COLOR);
   if (image.empty()) {
     return absl::InvalidArgumentError("Failed to load image: " + file_path);
@@ -466,5 +466,123 @@ absl::StatusOr<int> Utility::StringToInt(std::string s) {
     return absl::NotFoundError("Could not find int !");
   }
 }
+
+absl::StatusOr<std::pair<std::string, std::string>> Utility::GetOcrModelNames(
+    std::string lang, std::string ppocr_version) {
+  const static std::unordered_set<std::string> SUPPORT_PPOCR_VERSION = {
+      "PP-OCRv5", "PP-OCRv4", "PP-OCRv3"};
+  if (!ppocr_version.empty()) {
+    if (SUPPORT_PPOCR_VERSION.count(lang) == 0) {
+      return absl::InvalidArgumentError("Unsupported ppocr_version: " +
+                                        ppocr_version);
+    }
+  }
+  const static std::unordered_set<std::string> LATIN_LANGS = {
+      "af", "az", "bs", "cs",       "cy",     "da",    "de", "es", "et",
+      "fr", "ga", "hr", "hu",       "id",     "is",    "it", "ku", "la",
+      "lt", "lv", "mi", "ms",       "mt",     "nl",    "no", "oc", "pi",
+      "pl", "pt", "ro", "rs_latin", "sk",     "sl",    "sq", "sv", "sw",
+      "tl", "tr", "uz", "vi",       "french", "german"};
+  const static std::unordered_set<std::string> ARABIC_LANGS = {"ar", "fa", "ug",
+                                                               "ur"};
+  const static std::unordered_set<std::string> ESLAV_LANGS = {"ru", "be", "uk"};
+  const static std::unordered_set<std::string> CYRILLIC_LANGS = {
+      "ru",  "rs_cyrillic", "be",  "bg",  "uk",  "mn",  "abq", "ady",
+      "kbd", "ava",         "dar", "inh", "che", "lbe", "lez", "tab"};
+  const static std::unordered_set<std::string> DEVANAGARI_LANGS = {
+      "hi",  "mr",  "ne",  "bh",  "mai", "ang", "bho",
+      "mah", "sck", "new", "gom", "sa",  "bgc"};
+  const static std::unordered_set<std::string> SPECIFIC_LANGS = {
+      "ch", "en", "korean", "japan", "chinese_cht", "te", "ka", "ta"};
+
+  if (lang.empty()) lang = "ch";
+
+  const static std::unordered_set<std::string> supported_langs = []() {
+    std::unordered_set<std::string> s;
+    s.insert(LATIN_LANGS.begin(), LATIN_LANGS.end());
+    s.insert(ARABIC_LANGS.begin(), ARABIC_LANGS.end());
+    s.insert(ESLAV_LANGS.begin(), ESLAV_LANGS.end());
+    s.insert(CYRILLIC_LANGS.begin(), CYRILLIC_LANGS.end());
+    s.insert(DEVANAGARI_LANGS.begin(), DEVANAGARI_LANGS.end());
+    s.insert(SPECIFIC_LANGS.begin(), SPECIFIC_LANGS.end());
+    s.insert("ch");
+    return s;
+  }();
+  if (supported_langs.count(lang) == 0) {
+    return absl::InvalidArgumentError("Unsupported lang: " + lang);
+  }
+  if (ppocr_version.empty()) {
+    std::unordered_set<std::string> v5_langs = {"ch", "chinese_cht", "en",
+                                                "japan", "korean"};
+    v5_langs.insert(LATIN_LANGS.begin(), LATIN_LANGS.end());
+    v5_langs.insert(ESLAV_LANGS.begin(), ESLAV_LANGS.end());
+    if (v5_langs.count(lang)) {
+      ppocr_version = "PP-OCRv5";
+    } else {
+      std::unordered_set<std::string> v3_langs = LATIN_LANGS;
+      v3_langs.insert(ARABIC_LANGS.begin(), ARABIC_LANGS.end());
+      v3_langs.insert(CYRILLIC_LANGS.begin(), CYRILLIC_LANGS.end());
+      v3_langs.insert(DEVANAGARI_LANGS.begin(), DEVANAGARI_LANGS.end());
+      v3_langs.insert(SPECIFIC_LANGS.begin(), SPECIFIC_LANGS.end());
+      if (v3_langs.count(lang)) {
+        ppocr_version = "PP-OCRv3";
+      } else {
+        return absl::InvalidArgumentError("Invaild lang and ocr_version !");
+      }
+    }
+  }
+
+  if (ppocr_version == "PP-OCRv5") {
+    std::string rec_lang, rec_model_name;
+    if (lang == "ch" || lang == "chinese_cht" || lang == "en" ||
+        lang == "japan") {
+      rec_model_name = "PP-OCRv5_server_rec";
+    } else if (LATIN_LANGS.count(lang)) {
+      rec_lang = "latin";
+    } else if (ESLAV_LANGS.count(lang)) {
+      rec_lang = "eslav";
+    } else if (lang == "korean") {
+      rec_lang = "korean";
+    }
+    if (!rec_lang.empty()) {
+      rec_model_name = rec_lang + "_PP-OCRv5_mobile_rec";
+    }
+    return std::pair<std::string, std::string>{"PP-OCRv5_server_det",
+                                               rec_model_name};
+  } else if (ppocr_version == "PP-OCRv4") {
+    if (lang == "ch")
+      return std::pair<std::string, std::string>{"PP-OCRv4_mobile_det",
+                                                 "PP-OCRv4_mobile_rec"};
+    else if (lang == "en")
+      return std::pair<std::string, std::string>{"PP-OCRv4_mobile_det",
+                                                 "en_PP-OCRv4_mobile_rec"};
+    else
+      return absl::InvalidArgumentError(
+          "PP-OCRv4 only support ch and en languages !");
+  } else {
+    std::string rec_lang;
+    if (LATIN_LANGS.count(lang))
+      rec_lang = "latin";
+    else if (ARABIC_LANGS.count(lang))
+      rec_lang = "arabic";
+    else if (CYRILLIC_LANGS.count(lang))
+      rec_lang = "cyrillic";
+    else if (DEVANAGARI_LANGS.count(lang))
+      rec_lang = "devanagari";
+    else if (SPECIFIC_LANGS.count(lang))
+      rec_lang = lang;
+
+    std::string rec_model_name;
+    if (rec_lang == "ch")
+      rec_model_name = "PP-OCRv3_mobile_rec";
+    else if (!rec_lang.empty())
+      rec_model_name = rec_lang + "_PP-OCRv3_mobile_rec";
+
+    return std::pair<std::string, std::string>{"PP-OCRv3_mobile_det",
+                                               rec_model_name};
+  }
+  return absl::InvalidArgumentError("Invaild lang and ocr_version !");
+}
+
 const std::set<std::string> Utility::kImgSuffixes = {"jpg", "png", "jpeg",
                                                      "bmp"};

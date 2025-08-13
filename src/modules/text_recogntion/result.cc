@@ -25,8 +25,8 @@ using json = nlohmann::json;
 void TextRecResult::SaveToImg(const std::string& save_path) {
   int image_width = predictor_result_.input_image.size[1];
   int image_height = predictor_result_.input_image.size[0];
-  std::string text = predictor_result_.rec_text + "（" +
-                     std::to_string(predictor_result_.rec_score) + "）";
+  std::string text = predictor_result_.rec_text + "(" +
+                     std::to_string(predictor_result_.rec_score) + ")";
   int font = AdjustFontSize(image_width, text);
   font = 26;
   cv::Ptr<cv::freetype::FreeType2> ft2 = cv::freetype::createFreeType2();

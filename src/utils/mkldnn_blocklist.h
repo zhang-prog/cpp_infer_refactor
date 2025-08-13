@@ -14,8 +14,8 @@
 
 #pragma once
 
+#include <string>
 #include <unordered_set>
-
 namespace Mkldnn {
 
 extern const std::unordered_set<std::string> MKLDNN_BLOCKLIST;
