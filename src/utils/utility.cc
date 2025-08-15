@@ -290,12 +290,12 @@ absl::StatusOr<std::vector<cv::Mat>> Utility::SplitBatch(const cv::Mat& batch) {
   }
 
   std::vector<cv::Mat> split_mats;
-  int batch_size = batch.size[0];  // 第0维
-  std::vector<cv::Range> ranges(batch.dims);
+  int batch_size = batch.size[0];
+  std::vector<cv::Range> myranges(batch.dims);
   for (int i = 0; i < batch_size; ++i) {
-    ranges[0] = cv::Range(i, i + 1);
-    for (int d = 1; d < batch.dims; ++d) ranges[d] = cv::Range::all();
-    cv::Mat sub_mat = batch(&ranges[0]);
+    myranges[0] = cv::Range(i, i + 1);
+    for (int d = 1; d < batch.dims; ++d) myranges[d] = cv::Range::all();
+    cv::Mat sub_mat = batch(&myranges[0]);
 
     split_mats.push_back(sub_mat);
   }
@@ -385,12 +385,17 @@ absl::Status Utility::CreateDirectoryRecursive(const std::string& path) {
 
   size_t pos = 0;
   std::string dir = path;
-
+#ifdef _WIN32
+#define ACCESS _access
+#define F_OK 0
+#else
+#define ACCESS access
+#endif
   while (pos < dir.size()) {
     pos = dir.find_first_of(PATH_SEPARATOR, pos + 1);
     std::string subdir = (pos == std::string::npos) ? dir : dir.substr(0, pos);
 
-    if (!subdir.empty() && access(subdir.c_str(), F_OK) != 0) {
+    if (!subdir.empty() && ACCESS(subdir.c_str(), F_OK) != 0) {
       if (MakeDir(subdir) != 0) {
         return absl::InternalError("Failed to create directory: " + subdir);
       }
@@ -467,123 +472,26 @@ absl::StatusOr<int> Utility::StringToInt(std::string s) {
   }
 }
 
-// absl::StatusOr<std::pair<std::string, std::string>> Utility::GetOcrModelInfo(
-//     std::string lang, std::string ppocr_version) {
-//   const static std::unordered_set<std::string> SUPPORT_PPOCR_VERSION = {
-//       "PP-OCRv5", "PP-OCRv4", "PP-OCRv3"};
-//   if (!ppocr_version.empty()) {
-//     if (SUPPORT_PPOCR_VERSION.count(lang) == 0) {
-//       return absl::InvalidArgumentError("Unsupported ppocr_version: " +
-//                                         ppocr_version);
-//     }
-//   }
-//   const static std::unordered_set<std::string> LATIN_LANGS = {
-//       "af", "az", "bs", "cs",       "cy",     "da",    "de", "es", "et",
-//       "fr", "ga", "hr", "hu",       "id",     "is",    "it", "ku", "la",
-//       "lt", "lv", "mi", "ms",       "mt",     "nl",    "no", "oc", "pi",
-//       "pl", "pt", "ro", "rs_latin", "sk",     "sl",    "sq", "sv", "sw",
-//       "tl", "tr", "uz", "vi",       "french", "german"};
-//   const static std::unordered_set<std::string> ARABIC_LANGS = {"ar", "fa",
-//   "ug",
-//                                                                "ur"};
-//   const static std::unordered_set<std::string> ESLAV_LANGS = {"ru", "be",
-//   "uk"}; const static std::unordered_set<std::string> CYRILLIC_LANGS = {
-//       "ru",  "rs_cyrillic", "be",  "bg",  "uk",  "mn",  "abq", "ady",
-//       "kbd", "ava",         "dar", "inh", "che", "lbe", "lez", "tab"};
-//   const static std::unordered_set<std::string> DEVANAGARI_LANGS = {
-//       "hi",  "mr",  "ne",  "bh",  "mai", "ang", "bho",
-//       "mah", "sck", "new", "gom", "sa",  "bgc"};
-//   const static std::unordered_set<std::string> SPECIFIC_LANGS = {
-//       "ch", "en", "korean", "japan", "chinese_cht", "te", "ka", "ta"};
+bool Utility::StringToBool(const std::string& str) {
+  std::string result = str;
+  std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+  assert(result == "true" || result == "false");
+  if (result == "true") {
+    return true;
+  } else {
+    return false;
+  }
+}
 
-//   if (lang.empty()) lang = "ch";
+std::string Utility::VecToString(const std::vector<int>& input) {
+  std::string result;
+  for (auto it = input.begin(); it != input.end(); ++it) {
+    if (it != input.begin()) result += ",";
+    result += std::to_string(*it);
+  }
+  return result;
+}
 
-//   const static std::unordered_set<std::string> supported_langs = []() {
-//     std::unordered_set<std::string> s;
-//     s.insert(LATIN_LANGS.begin(), LATIN_LANGS.end());
-//     s.insert(ARABIC_LANGS.begin(), ARABIC_LANGS.end());
-//     s.insert(ESLAV_LANGS.begin(), ESLAV_LANGS.end());
-//     s.insert(CYRILLIC_LANGS.begin(), CYRILLIC_LANGS.end());
-//     s.insert(DEVANAGARI_LANGS.begin(), DEVANAGARI_LANGS.end());
-//     s.insert(SPECIFIC_LANGS.begin(), SPECIFIC_LANGS.end());
-//     s.insert("ch");
-//     return s;
-//   }();
-//   if (supported_langs.count(lang) == 0) {
-//     return absl::InvalidArgumentError("Unsupported lang: " + lang);
-//   }
-//   if (ppocr_version.empty()) {
-//     std::unordered_set<std::string> v5_langs = {"ch", "chinese_cht", "en",
-//                                                 "japan", "korean"};
-//     v5_langs.insert(LATIN_LANGS.begin(), LATIN_LANGS.end());
-//     v5_langs.insert(ESLAV_LANGS.begin(), ESLAV_LANGS.end());
-//     if (v5_langs.count(lang)) {
-//       ppocr_version = "PP-OCRv5";
-//     } else {
-//       std::unordered_set<std::string> v3_langs = LATIN_LANGS;
-//       v3_langs.insert(ARABIC_LANGS.begin(), ARABIC_LANGS.end());
-//       v3_langs.insert(CYRILLIC_LANGS.begin(), CYRILLIC_LANGS.end());
-//       v3_langs.insert(DEVANAGARI_LANGS.begin(), DEVANAGARI_LANGS.end());
-//       v3_langs.insert(SPECIFIC_LANGS.begin(), SPECIFIC_LANGS.end());
-//       if (v3_langs.count(lang)) {
-//         ppocr_version = "PP-OCRv3";
-//       } else {
-//         return absl::InvalidArgumentError("Invaild lang and ocr_version !");
-//       }
-//     }
-//   }
-
-//   if (ppocr_version == "PP-OCRv5") {
-//     std::string rec_lang, rec_model_name;
-//     if (lang == "ch" || lang == "chinese_cht" || lang == "en" ||
-//         lang == "japan") {
-//       rec_model_name = "PP-OCRv5_server_rec";
-//     } else if (LATIN_LANGS.count(lang)) {
-//       rec_lang = "latin";
-//     } else if (ESLAV_LANGS.count(lang)) {
-//       rec_lang = "eslav";
-//     } else if (lang == "korean") {
-//       rec_lang = "korean";
-//     }
-//     if (!rec_lang.empty()) {
-//       rec_model_name = rec_lang + "_PP-OCRv5_mobile_rec";
-//     }
-//     return std::pair<std::string, std::string>{"PP-OCRv5_server_det",
-//                                                rec_model_name};
-//   } else if (ppocr_version == "PP-OCRv4") {
-//     if (lang == "ch")
-//       return std::pair<std::string, std::string>{"PP-OCRv4_mobile_det",
-//                                                  "PP-OCRv4_mobile_rec"};
-//     else if (lang == "en")
-//       return std::pair<std::string, std::string>{"PP-OCRv4_mobile_det",
-//                                                  "en_PP-OCRv4_mobile_rec"};
-//     else
-//       return absl::InvalidArgumentError(
-//           "PP-OCRv4 only support ch and en languages !");
-//   } else {
-//     std::string rec_lang;
-//     if (LATIN_LANGS.count(lang))
-//       rec_lang = "latin";
-//     else if (ARABIC_LANGS.count(lang))
-//       rec_lang = "arabic";
-//     else if (CYRILLIC_LANGS.count(lang))
-//       rec_lang = "cyrillic";
-//     else if (DEVANAGARI_LANGS.count(lang))
-//       rec_lang = "devanagari";
-//     else if (SPECIFIC_LANGS.count(lang))
-//       rec_lang = lang;
-
-//     std::string rec_model_name;
-//     if (rec_lang == "ch")
-//       rec_model_name = "PP-OCRv3_mobile_rec";
-//     else if (!rec_lang.empty())
-//       rec_model_name = rec_lang + "_PP-OCRv3_mobile_rec";
-
-//     return std::pair<std::string, std::string>{"PP-OCRv3_mobile_det",
-//                                                rec_model_name};
-//   }
-//   return absl::InvalidArgumentError("Invaild lang and ocr_version !");
-// }
 absl::StatusOr<std::tuple<std::string, std::string, std::string>>
 Utility::GetOcrModelInfo(std::string lang, std::string ppocr_version) {
   // Font constants

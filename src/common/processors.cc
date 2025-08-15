@@ -720,7 +720,6 @@ std::vector<cv::Point2f> CropByPolys::GetMinAreaRectPoints(
   cv::RotatedRect minRect = cv::minAreaRect(pts);
   std::vector<cv::Point2f> box(4);
   minRect.points(box.data());
-  // 排序顺序和python版一致
   std::sort(box.begin(), box.end(),
             [](const cv::Point2f& a, const cv::Point2f& b) {
               return a.x < b.x || (a.x == b.x && a.y < b.y);

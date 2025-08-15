@@ -113,8 +113,7 @@ void TextRecResult::SaveToJson(const std::string& save_path) const {
   nlohmann::ordered_json j;
 
   j["input_path"] = predictor_result_.input_path;
-  j["page_index"] = nlohmann::json::value_t::null;
-  ;  //********
+  j["page_index"] = nlohmann::json::value_t::null;  //********
 
   j["rec_text"] = predictor_result_.rec_text;
   j["rec_score"] = predictor_result_.rec_score;

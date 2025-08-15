@@ -28,6 +28,12 @@
 #include "src/utils/pp_option.h"
 #include "src/utils/yaml_config.h"
 
+#ifdef WITH_GPU
+static constexpr const char *DEVICE = "gpu:0";
+#else
+static constexpr const char *DEVICE = "cpu";
+#endif
+
 class BasePredictor {
  public:
   BasePredictor(const std::string &model_dir, const std::string &device = "cpu",

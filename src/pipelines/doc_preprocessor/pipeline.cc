@@ -20,7 +20,7 @@
 
 _DocPreprocessorPipeline::_DocPreprocessorPipeline(
     const std::string& model_dir, const DocPreprocessorPipelineParams& params)
-    : BasePipeline(model_dir), params_(params), config_(params.config) {
+    : BasePipeline(), params_(params), config_(params.config) {
   if (params.config.empty()) {
     auto config_path = Utility::GetDefaultConfig("doc_preprocessor");
     if (!config_path.ok()) {

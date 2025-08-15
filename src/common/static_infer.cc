@@ -147,9 +147,7 @@ absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
   try {
     predictor_->Run();
   } catch (const std::exception &e) {
-    std::cerr << "Exception caught: " << e.what() << std::endl;
-  } catch (...) {
-    std::cerr << "Unknown exception caught!" << std::endl;
+    INFOE("static Infer fail: %s", e.what());
   }
 
   std::vector<std::vector<float>> outputs;

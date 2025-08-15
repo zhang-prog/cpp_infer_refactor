@@ -389,16 +389,34 @@ bool end_with(const string& str, const string& with) {
 }
 
 long long timestamp_now() {
+#ifdef _WIN32
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+  ULARGE_INTEGER li;
+  li.LowPart = ft.dwLowDateTime;
+  li.HighPart = ft.dwHighDateTime;
+  return (li.QuadPart - 116444736000000000LL) / 10000LL;
+#else
   return chrono::duration_cast<chrono::milliseconds>(
              chrono::system_clock::now().time_since_epoch())
       .count();
+#endif
 }
 
 double timestamp_now_float() {
+#ifdef _WIN32
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+  ULARGE_INTEGER li;
+  li.LowPart = ft.dwLowDateTime;
+  li.HighPart = ft.dwHighDateTime;
+  return ((li.QuadPart - 116444736000000000LL) / 10000.0);
+#else
   return chrono::duration_cast<chrono::microseconds>(
              chrono::system_clock::now().time_since_epoch())
              .count() /
          1000.0;
+#endif
 }
 
 static struct Logger {

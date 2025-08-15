@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <fstream>
 #include <map>
 #include <opencv2/opencv.hpp>
@@ -23,9 +24,9 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>
 #define mkdir _mkdir
 static const char PATH_SEPARATOR = '\\';
 #else
@@ -90,10 +91,8 @@ class Utility {
       const std::string& suffix = "_res");
 
   static absl::StatusOr<int> StringToInt(std::string s);
-
-  //   static absl::StatusOr<std::pair<std::string, std::string>>
-  //   GetOcrModelInfo(
-  //       std::string lang = "", std::string ppocr_version = "");
+  static bool StringToBool(const std::string& str);
+  static std::string VecToString(const std::vector<int>& input);
 
   static absl::StatusOr<std::tuple<std::string, std::string, std::string>>
   GetOcrModelInfo(std::string lang, std::string ppocr_version);

@@ -41,8 +41,7 @@ class AutoParallelSimpleInferencePipeline : public BasePipeline {
 
  public:
   AutoParallelSimpleInferencePipeline(const std::string& model_dir,
-                                      const PipelineParams& params,
-                                      int thread_num = 1);
+                                      const PipelineParams& params);
   absl::Status Init();
 
   std::future<PipelineResult> PredictAsync(const PipelineInput& input);
@@ -72,12 +71,11 @@ template <typename Pipeline, typename PipelineParams, typename PipelineInput,
 AutoParallelSimpleInferencePipeline<Pipeline, PipelineParams, PipelineInput,
                                     PipelineResult>::
     AutoParallelSimpleInferencePipeline(const std::string& model_dir,
-                                        const PipelineParams& params,
-                                        int thread_num)
-    : BasePipeline(model_dir),
+                                        const PipelineParams& params)
+    : BasePipeline(),
       model_dir_(model_dir),
       params_(params),
-      thread_num_(thread_num) {
+      thread_num_(params.threads.value()) {
   auto status = Init();
   if (!status.ok()) {
     INFOE("Pipeline pool init error : %s", status.ToString().c_str());

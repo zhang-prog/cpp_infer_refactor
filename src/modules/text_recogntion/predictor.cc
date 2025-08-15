@@ -45,8 +45,7 @@ void TextRecPredictor::Build() {
   const auto& pre_params = config_.PreProcessOpInfo();
   Register<ReadImage>("Read", "BGR");
   Register<OCRReisizeNormImg>("ReisizeNorm");
-  Register<ToBatch>("ToBatch");
-
+  Register<ToBatchUniform>("ToBatch");
   infer_ptr_ = CreateStaticInfer();
   const auto& post_params = config_.PostProcessOpInfo();
   post_op_["CTCLabelDecode"] = std::unique_ptr<CTCLabelDecode>(

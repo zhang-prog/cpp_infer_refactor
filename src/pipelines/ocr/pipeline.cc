@@ -15,10 +15,11 @@
 #include "pipeline.h"
 
 #include "result.h"
+#include "src/utils/args.h"
 _OCRPipeline::_OCRPipeline(const std::string& model_dir,
                            const OCRPipelineParams& params)
-    : BasePipeline(model_dir), params_(params), config_(params.config) {
-  if (params.config.empty()) {
+    : BasePipeline(), params_(params) {
+  if (!params.paddlex_config.has_value()) {  //***
     auto config_path = Utility::GetDefaultConfig("OCR");
     if (!config_path.ok()) {
       INFOE("Could not find OCR pipeline config file: %s",
@@ -26,6 +27,7 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
     }
     config_ = YamlConfig(config_path.value());
   }
+  OverrideConfig();
   auto result_use_doc_preprocessor =
       config_.GetBool("use_doc_preprocessor", true);
   if (!result_use_doc_preprocessor.ok()) {
@@ -40,9 +42,9 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
             result_doc_preprocessor_config.status().ToString().c_str());
     }
     DocPreprocessorPipelineParams params;
-    params.device = params_.device;
-    params.precision = params_.precision;
-    params.enable_mkldnn = params_.enable_mkldnn;
+    params.device = params_.device.value();
+    params.precision = params_.precision.value();
+    params.enable_mkldnn = params_.enable_mkldnn.value();
     params.use_doc_orientation_classify =
         config_.GetBool("DocPreprocessor.use_doc_orientation_classify", true)
             .value();  //** maybe no useless, config include
@@ -72,9 +74,9 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
             result_textline_orientation_config.status().ToString().c_str());
     }
     ClasPredictorParams params;
-    params.device = params_.device;
-    params.precision = params_.precision;
-    params.enable_mkldnn = params_.enable_mkldnn;
+    params.device = params_.device.value();
+    params.precision = params_.precision.value();
+    params.enable_mkldnn = params_.enable_mkldnn.value();
     auto result_batch_size =
         config_.GetInt("TextLineOrientation.batch_size", 1);
     if (!result_batch_size.ok()) {
@@ -104,9 +106,9 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
   }
   text_type_ = text_type.value();
   TextDetPredictorParams params_det;
-  params_det.device = params_.device;
-  params_det.precision = params_.precision;
-  params_det.enable_mkldnn = params_.enable_mkldnn;
+  params_det.device = params_.device.value();
+  params_det.precision = params_.precision.value();
+  params_det.enable_mkldnn = params_.enable_mkldnn.value();
   params_det.batch_size = config_.GetInt("TextDetection.batch_size", 1).value();
   if (text_type_ == "general") {
     params_det.limit_side_len =
@@ -162,10 +164,11 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
       CreateModule<TextDetPredictor>(model_dir_text_det.value(), params_det);
 
   TextRecPredictorParams params_rec;
-  params_rec.device = params_.device;
-  params_rec.precision = params_.precision;
-  params_rec.enable_mkldnn = params_.enable_mkldnn;
-
+  params_rec.device = params_.device.value();
+  params_rec.precision = params_.precision.value();
+  params_rec.enable_mkldnn = params_.enable_mkldnn.value();
+  params_rec.batch_size =
+      config_.GetInt("TextRecognition.batch_size", 1).value();
   auto result_text_rec_model_name =
       config_.GetString("TextRecognition.model_name");
   if (!result_text_rec_model_name.ok()) {
@@ -366,6 +369,7 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
         for (auto& item : sorted_subs_info) {
           sorted_subs_of_img.push_back(all_subs_of_img[item.first]);
         }
+        INFOW("rec infer coming");
         text_rec_model_->Predict(sorted_subs_of_img);
         // cv::imwrite("num_1,.jpg", sorted_subs_of_img[0]);
         auto text_rec_model_results =
@@ -435,4 +439,267 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
                    std::make_move_iterator(infer_data_result.value().end()));
   }
   return results;
+}
+
+void _OCRPipeline::OverrideConfig() {
+  auto& data = config_.Data();
+  if (params_.doc_orientation_classify_model_name.has_value()) {
+    auto it = config_.FindKey("DocOrientationClassify.model_name");
+    if (!it.ok()) {
+      data
+          ["SubPipelines.DocPreprocessor.SubModules.DocOrientationClassify."
+           "model_name"] = params_.doc_orientation_classify_model_name.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.doc_orientation_classify_model_name.value();
+    }
+  }
+  if (params_.doc_orientation_classify_model_dir.has_value()) {
+    auto it = config_.FindKey("DocOrientationClassify.model_dir");
+    if (!it.ok()) {
+      data
+          ["SubPipelines.DocPreprocessor.SubModules.DocOrientationClassify."
+           "model_dir"] = params_.doc_orientation_classify_model_dir.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.doc_orientation_classify_model_dir.value();
+    }
+  }
+  if (params_.doc_unwarping_model_name.has_value()) {
+    auto it = config_.FindKey("DocUnwarping.model_name");
+    if (!it.ok()) {
+      data["SubPipelines.DocPreprocessor.SubModules.DocUnwarping.model_name"] =
+          params_.doc_unwarping_model_name.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.doc_unwarping_model_name.value();
+    }
+  }
+  if (params_.doc_unwarping_model_dir.has_value()) {
+    auto it = config_.FindKey("DocUnwarping.model_dir");
+    if (!it.ok()) {
+      data["SubPipelines.DocPreprocessor.SubModules.DocUnwarping.model_dir"] =
+          params_.doc_unwarping_model_dir.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.doc_unwarping_model_dir.value();
+    }
+  }
+  if (params_.text_detection_model_name.has_value()) {
+    auto it = config_.FindKey("TextDetection.model_name");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.model_name"] =
+          params_.text_detection_model_name.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.text_detection_model_name.value();
+    }
+  }
+  if (params_.text_detection_model_dir.has_value()) {
+    auto it = config_.FindKey("TextDetection.model_dir");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.model_dir"] =
+          params_.text_detection_model_dir.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.text_detection_model_dir.value();
+    }
+  }
+  if (params_.textline_orientation_model_name.has_value()) {
+    auto it = config_.FindKey("TextLineOrientation.model_name");
+    if (!it.ok()) {
+      data["SubModules.TextLineOrientation.model_name"] =
+          params_.textline_orientation_model_name.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.textline_orientation_model_name.value();
+    }
+  }
+  if (params_.textline_orientation_model_dir.has_value()) {
+    auto it = config_.FindKey("TextLineOrientation.model_dir");
+    if (!it.ok()) {
+      data["SubModules.TextLineOrientation.model_dir"] =
+          params_.textline_orientation_model_dir.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.textline_orientation_model_dir.value();
+    }
+  }
+  if (params_.textline_orientation_batch_size.has_value()) {
+    auto it = config_.FindKey("TextLineOrientation.batch_size");
+    if (!it.ok()) {
+      data["SubModules.TextLineOrientation.batch_size"] =
+          std::to_string(params_.textline_orientation_batch_size.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] =
+          std::to_string(params_.textline_orientation_batch_size.value());
+    }
+  }
+
+  if (params_.text_recognition_model_name.has_value()) {
+    auto it = config_.FindKey("TextRecognition.model_name");
+    if (!it.ok()) {
+      data["SubModules.TextRecognition.model_name"] =
+          params_.text_recognition_model_name.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.text_recognition_model_name.value();
+    }
+  }
+  if (params_.text_recognition_model_dir.has_value()) {
+    auto it = config_.FindKey("TextRecognition.model_dir");
+    if (!it.ok()) {
+      data["SubModules.TextRecognition.model_dir"] =
+          params_.text_recognition_model_dir.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.text_recognition_model_dir.value();
+    }
+  }
+  if (params_.text_recognition_batch_size.has_value()) {
+    auto it = config_.FindKey("TextRecognition.batch_size");
+    if (!it.ok()) {
+      data["SubModules.TextRecognition.batch_size"] =
+          std::to_string(params_.text_recognition_batch_size.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = std::to_string(params_.text_recognition_batch_size.value());
+    }
+  }
+
+  if (params_.use_doc_orientation_classify.has_value()) {
+    auto it = config_.FindKey("DocPreprocessor.use_doc_orientation_classify");
+    if (!it.ok()) {
+      data["SubPipelines.DocPreprocessor.use_doc_orientation_classify"] =
+          params_.use_doc_orientation_classify.value() ? "true" : "false";
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] =
+          params_.use_doc_orientation_classify.value() ? "true" : "false";
+    }
+  }
+  if (params_.use_doc_unwarping.has_value()) {
+    auto it = config_.FindKey("DocPreprocessor.use_doc_unwarping");
+    if (!it.ok()) {
+      data["SubPipelines.DocPreprocessor.use_doc_unwarping"] =
+          params_.use_doc_unwarping.value() ? "true" : "false";
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.use_doc_unwarping.value() ? "true" : "false";
+    }
+  }
+  if (params_.use_textline_orientation.has_value()) {
+    auto it = config_.FindKey("use_textline_orientation");
+    if (!it.ok()) {
+      data["use_textline_orientation"] =
+          params_.use_textline_orientation.value() ? "true" : "false";
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.use_textline_orientation.value() ? "true" : "false";
+    }
+  }
+  if (params_.text_det_limit_side_len.has_value()) {
+    auto it = config_.FindKey("TextDetection.limit_side_len");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.limit_side_len"] =
+          std::to_string(params_.text_det_limit_side_len.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = std::to_string(params_.text_det_limit_side_len.value());
+    }
+  }
+  if (params_.text_det_limit_type.has_value()) {
+    auto it = config_.FindKey("TextDetection.limit_type");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.limit_type"] =
+          params_.text_det_limit_type.value();
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = params_.text_det_limit_type.value();
+    }
+  }
+  if (params_.text_det_thresh.has_value()) {
+    auto it = config_.FindKey("TextDetection.thresh");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.thresh"] =
+          std::to_string(params_.text_det_thresh.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = std::to_string(params_.text_det_thresh.value());
+    }
+  }
+  if (params_.text_det_box_thresh.has_value()) {
+    auto it = config_.FindKey("TextDetection.box_thresh");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.box_thresh"] =
+          std::to_string(params_.text_det_box_thresh.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = std::to_string(params_.text_det_box_thresh.value());
+    }
+  }
+  if (params_.text_det_unclip_ratio.has_value()) {
+    auto it = config_.FindKey("TextDetection.unclip_ratio");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.unclip_ratio"] =
+          std::to_string(params_.text_det_unclip_ratio.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = std::to_string(params_.text_det_unclip_ratio.value());
+    }
+  }
+  if (params_.text_det_input_shape.has_value()) {
+    auto it = config_.FindKey("TextDetection.input_shape");
+    if (!it.ok()) {
+      data["SubModules.TextDetection.input_shape"] =
+          Utility::VecToString(params_.text_det_input_shape.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = Utility::VecToString(params_.text_det_input_shape.value());
+    }
+  }
+  if (params_.text_rec_score_thresh.has_value()) {
+    auto it = config_.FindKey("TextRecognition.score_thresh");
+    if (!it.ok()) {
+      data["SubModules.TextRecognition.score_thresh"] =
+          std::to_string(params_.text_rec_score_thresh.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = std::to_string(params_.text_rec_score_thresh.value());
+    }
+  }
+  if (params_.text_rec_input_shape.has_value()) {
+    auto it = config_.FindKey("TextRecognition.input_shape");
+    if (!it.ok()) {
+      data["SubModules.TextRecognition.input_shape"] =
+          Utility::VecToString(params_.text_rec_input_shape.value());
+    } else {
+      auto key = it.value().first;
+      data.erase(data.find(key));
+      data[key] = Utility::VecToString(params_.text_rec_input_shape.value());
+    }
+  }
 }

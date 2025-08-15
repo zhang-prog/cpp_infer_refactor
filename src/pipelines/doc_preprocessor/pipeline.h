@@ -44,6 +44,7 @@ struct DocPreprocessorPipelineParams {
   std::unordered_map<std::string, std::string> config = {};
   bool use_doc_orientation_classify = false;
   bool use_doc_unwarping = false;
+  absl::optional<int> threads = 1;
 };
 
 class _DocPreprocessorPipeline : public BasePipeline {
@@ -92,10 +93,9 @@ class DocPreprocessorPipeline
           std::vector<std::unique_ptr<BaseCVResult>>> {
  public:
   DocPreprocessorPipeline(const std::string& model_dir,
-                          const DocPreprocessorPipelineParams& params,
-                          int thread_num = 1)
-      : AutoParallelSimpleInferencePipeline(model_dir, params, thread_num),
-        thread_num_(thread_num){};
+                          const DocPreprocessorPipelineParams& params)
+      : AutoParallelSimpleInferencePipeline(model_dir, params),
+        thread_num_(params.threads.value()){};
 
   std::vector<std::unique_ptr<BaseCVResult>> Predict(
       const std::vector<std::string>& input) override;

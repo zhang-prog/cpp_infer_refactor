@@ -23,9 +23,9 @@
 struct TextRecPredictorResult {
   std::string input_path = "";
   cv::Mat input_image;
-  std::string rec_text;
-  float rec_score;
-  std::string vis_font;
+  std::string rec_text = "";
+  float rec_score = 0.0;
+  std::string vis_font = "";
 };
 
 struct TextRecPredictorParams {

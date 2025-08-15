@@ -20,6 +20,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "src/common/processors.h"
 #include "src/utils/func_register.h"
 
 class OCRReisizeNormImg : public BaseProcessor {
@@ -59,4 +60,61 @@ class CTCLabelDecode {
   std::unordered_map<int, std::string> dict_;
 
   const std::vector<int> IGNORE_TOKEN = {0};
+};
+
+class ToBatchUniform : public ToBatch {
+ public:
+  absl::StatusOr<std::vector<cv::Mat>> Apply(
+      std::vector<cv::Mat>& input, const void* param = nullptr) const override {
+    if (input.empty()) {
+      return absl::InvalidArgumentError("Input image vector is empty.");
+    }
+    int numDims = input[0].dims;
+    int dtype = input[0].type();
+
+    int maxWidth = 0;
+    for (const auto& img : input) {
+      if (img.dims != numDims || img.type() != dtype) {
+        return absl::InvalidArgumentError(
+            "All images must have the same number of dimensions and data type");
+      }
+
+      for (int i = 0; i < numDims - 1; ++i) {
+        if (img.size[i] != input[0].size[i]) {
+          return absl::InvalidArgumentError(
+              "All images must have the same dimensions except width");
+        }
+      }
+      maxWidth = std::max(maxWidth, img.size[numDims - 1]);
+    }
+
+    std::vector<cv::Mat> paddedImages;
+
+    for (const auto& img : input) {
+      int currentWidth = img.size[numDims - 1];
+
+      if (currentWidth == maxWidth) {
+        paddedImages.push_back(img.clone());
+        continue;
+      }
+
+      std::vector<int> newSizes(numDims);
+      for (int i = 0; i < numDims - 1; ++i) {
+        newSizes[i] = img.size[i];
+      }
+      newSizes[numDims - 1] = maxWidth;
+
+      cv::Mat paddedImg(numDims, newSizes.data(), dtype, cv::Scalar::all(0));
+
+      std::vector<cv::Range> srcRanges(numDims, cv::Range::all());
+
+      std::vector<cv::Range> dstRanges(numDims, cv::Range::all());
+      dstRanges[numDims - 1] = cv::Range(0, currentWidth);
+
+      img.copyTo(paddedImg(dstRanges));
+
+      paddedImages.push_back(paddedImg);
+    }
+    return ToBatch::Apply(paddedImages);
+  }
 };
