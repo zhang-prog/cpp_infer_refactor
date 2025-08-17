@@ -183,8 +183,6 @@ absl::StatusOr<std::string> YamlConfig::GetString(
       return info.second;
     }
   }
-  INFOW("Key not found %s,will use default value %s.", key.c_str(),
-        default_value.c_str());
   return default_value;
 }
 

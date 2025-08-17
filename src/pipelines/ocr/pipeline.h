@@ -27,7 +27,7 @@
 #include "src/common/processors.h"
 #include "src/modules/image_classification/predictor.h"
 #include "src/modules/text_detection/predictor.h"
-#include "src/modules/text_recogntion/predictor.h"
+#include "src/modules/text_recognition/predictor.h"
 #include "src/pipelines/doc_preprocessor/pipeline.h"
 #include "src/utils/ilogger.h"
 #include "src/utils/utility.h"
@@ -85,19 +85,19 @@ struct OCRPipelineParams {
   absl::optional<std::vector<int>> text_rec_input_shape = absl::nullopt;
   absl::optional<std::string> lang = absl::nullopt;
   absl::optional<std::string> ocr_version = absl::nullopt;
-  absl::optional<std::string> device = DEVICE;
-  absl::optional<bool> enable_mkldnn = true;
-  absl::optional<int> mkldnn_cache_capacity = 10;
-  absl::optional<std::string> precision = "fp32";
-  absl::optional<int> cpu_threads = 8;
-  absl::optional<int> threads = 1;
-  absl::optional<std::string> paddlex_config = absl::nullopt;
+  absl::optional<std::string> vis_font_dir = absl::nullopt;
+  absl::optional<std::string> device = absl::nullopt;
+  bool enable_mkldnn = true;
+  int mkldnn_cache_capacity = 10;
+  std::string precision = "fp32";
+  int cpu_threads = 8;
+  int threads = 1;
+  absl::optional<Utility::PaddleXConfigVariant> paddlex_config = absl::nullopt;
 };
 
 class _OCRPipeline : public BasePipeline {
  public:
-  explicit _OCRPipeline(const std::string& model_dir,
-                        const OCRPipelineParams& params);
+  explicit _OCRPipeline(const OCRPipelineParams& params);
   virtual ~_OCRPipeline() = default;
   _OCRPipeline() = delete;
 
@@ -144,9 +144,9 @@ class OCRPipeline
           _OCRPipeline, OCRPipelineParams, std::vector<std::string>,
           std::vector<std::unique_ptr<BaseCVResult>>> {
  public:
-  OCRPipeline(const std::string& model_dir, const OCRPipelineParams& params)
-      : AutoParallelSimpleInferencePipeline(model_dir, params),
-        thread_num_(params.threads.value()){};
+  OCRPipeline(const OCRPipelineParams& params)
+      : AutoParallelSimpleInferencePipeline(params),
+        thread_num_(params.threads){};
 
   std::vector<std::unique_ptr<BaseCVResult>> Predict(
       const std::vector<std::string>& input) override;

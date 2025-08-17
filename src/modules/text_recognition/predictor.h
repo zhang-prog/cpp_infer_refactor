@@ -29,26 +29,23 @@ struct TextRecPredictorResult {
 };
 
 struct TextRecPredictorParams {
-  std::string device = "cpu";
+  absl::optional<std::string> model_name = absl::nullopt;
+  absl::optional<std::string> model_dir = absl::nullopt;
+  absl::optional<std::string> lang = absl::nullopt;
+  absl::optional<std::string> ocr_version = absl::nullopt;
+  absl::optional<std::string> vis_font_dir = absl::nullopt;
+  absl::optional<std::string> device = absl::nullopt;
   std::string precision = "fp32";
-  bool enable_mkldnn = false;
+  bool enable_mkldnn = true;
+  int mkldnn_cache_capacity = 10;
+  int cpu_threads = 8;
   int batch_size = 1;
-  std::unordered_map<std::string, std::string> config = {};
-  std::string lang = "";
-  std::string ocr_version = "";
-  std::string vis_font_dir =
-      "/workspace/cpp_infer_refactor/models/PP-OCRv5_server_rec/simfang.ttf";
+  absl::optional<std::vector<int>> input_shape = absl::nullopt;
 };
 
 class TextRecPredictor : public BasePredictor {
  public:
-  TextRecPredictor(
-      const std::string &model_dir, const std::string &device = "cpu",
-      const std::string &precision = "fp32", const bool enable_mkldnn = false,
-      int batch_size = 1,
-      const std::unordered_map<std::string, std::string> &config = {});
-  TextRecPredictor(const std::string &model_dir,
-                   const TextRecPredictorParams &params);
+  TextRecPredictor(const TextRecPredictorParams &params);
 
   std::vector<TextRecPredictorResult> PredictorResult() const {
     return predictor_result_vec_;

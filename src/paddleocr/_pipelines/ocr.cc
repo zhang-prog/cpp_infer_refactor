@@ -19,13 +19,21 @@
 
 #define COPY_PARAMS(field) to.field = from.field;
 
+PaddleOCR::PaddleOCR(const PaddleOCRParams& params) : params_(params) {
+  OverrideConfig();
+  auto status = CheckParams();
+  if (!status.ok()) {
+    INFOE("Init paddleOCR fail : %s", status.ToString().c_str());
+  }
+  CreatePipeline();
+};
 std::vector<std::unique_ptr<BaseCVResult>> PaddleOCR::Predict(
     const std::vector<std::string>& input) {
   return pipeline_infer_->Predict(input);
 }
 void PaddleOCR::CreatePipeline() {
   pipeline_infer_ = std::unique_ptr<BasePipeline>(
-      new OCRPipeline(model_dir_, ToOCRPipelineParams(params_)));
+      new OCRPipeline(ToOCRPipelineParams(params_)));
 }
 void PaddleOCR::OverrideConfig() {
   if (!FLAGS_doc_orientation_classify_model_name.empty()) {
@@ -113,6 +121,9 @@ void PaddleOCR::OverrideConfig() {
   if (!FLAGS_ocr_version.empty()) {
     params_.ocr_version = FLAGS_ocr_version;
   }
+  if (!FLAGS_vis_font_dir.empty()) {
+    params_.vis_font_dir = FLAGS_vis_font_dir;
+  }
   if (!FLAGS_device.empty()) {
     params_.device = FLAGS_device;
   }
@@ -134,6 +145,25 @@ void PaddleOCR::OverrideConfig() {
   if (!FLAGS_paddlex_config.empty()) {
     params_.paddlex_config = FLAGS_paddlex_config;
   }
+}
+
+absl::Status PaddleOCR::CheckParams() {
+  if (!params_.doc_orientation_classify_model_dir.has_value()) {
+    return absl::NotFoundError("Require doc orientation classify model dir.");
+  }
+  if (!params_.doc_unwarping_model_dir.has_value()) {
+    return absl::NotFoundError("Require doc unwarping model dir.");
+  }
+  if (!params_.text_detection_model_dir.has_value()) {
+    return absl::NotFoundError("Require text detection model dir.");
+  }
+  if (!params_.textline_orientation_model_dir.has_value()) {
+    return absl::NotFoundError("Require textline orientation model_dir.");
+  }
+  if (!params_.text_recognition_model_dir.has_value()) {
+    return absl::NotFoundError("Require text recognition model_dir.");
+  }
+  return absl::OkStatus();
 }
 
 OCRPipelineParams PaddleOCR::ToOCRPipelineParams(const PaddleOCRParams& from) {
@@ -163,6 +193,7 @@ OCRPipelineParams PaddleOCR::ToOCRPipelineParams(const PaddleOCRParams& from) {
   COPY_PARAMS(text_rec_input_shape)
   COPY_PARAMS(lang)
   COPY_PARAMS(ocr_version)
+  COPY_PARAMS(vis_font_dir)
   COPY_PARAMS(device)
   COPY_PARAMS(enable_mkldnn)
   COPY_PARAMS(mkldnn_cache_capacity)

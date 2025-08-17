@@ -16,10 +16,15 @@
 
 #include "result.h"
 #include "src/utils/args.h"
-_OCRPipeline::_OCRPipeline(const std::string& model_dir,
-                           const OCRPipelineParams& params)
+_OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
     : BasePipeline(), params_(params) {
-  if (!params.paddlex_config.has_value()) {  //***
+  if (params.paddlex_config.has_value()) {  //***
+    if (params.paddlex_config.value().IsStr()) {
+      config_ = YamlConfig(params.paddlex_config.value().GetStr());
+    } else {
+      config_ = YamlConfig(params.paddlex_config.value().GetMap());
+    }
+  } else {
     auto config_path = Utility::GetDefaultConfig("OCR");
     if (!config_path.ok()) {
       INFOE("Could not find OCR pipeline config file: %s",
@@ -42,41 +47,35 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
             result_doc_preprocessor_config.status().ToString().c_str());
     }
     DocPreprocessorPipelineParams params;
-    params.device = params_.device.value();
-    params.precision = params_.precision.value();
-    params.enable_mkldnn = params_.enable_mkldnn.value();
-    params.use_doc_orientation_classify =
-        config_.GetBool("DocPreprocessor.use_doc_orientation_classify", true)
-            .value();  //** maybe no useless, config include
-    params.use_doc_unwarping =
-        config_.GetBool("DocPreprocessor.use_doc_unwarping", true).value();
-    use_doc_orientation_classify_ =
-        params.use_doc_orientation_classify;  //** maybe no useless, config
-                                              // include
-    use_doc_unwarping_ = params.use_doc_unwarping;
-    params.config = result_doc_preprocessor_config.value();
-
+    params.device = params_.device;
+    params.precision = params_.precision;
+    params.enable_mkldnn = params_.enable_mkldnn;
+    params.mkldnn_cache_capacity = params_.mkldnn_cache_capacity;
+    params.cpu_threads = params_.cpu_threads;
+    params.paddlex_config = result_doc_preprocessor_config.value();
     doc_preprocessors_pipeline_ =
-        CreatePipeline<_DocPreprocessorPipeline>(model_dir, params);
+        CreatePipeline<_DocPreprocessorPipeline>(params);
+
+    use_doc_orientation_classify_ =
+        config_.GetBool("DocPreprocessor.use_doc_orientation_classify", true)
+            .value();
+    use_doc_unwarping_ =
+        config_.GetBool("DocPreprocessor.use_doc_unwarping", true).value();
   }
   auto result_use_textline_orientation =
       config_.GetBool("use_textline_orientation", true);
-  if (!result_use_doc_preprocessor.ok()) {
+  if (!result_use_textline_orientation.ok()) {
     INFOE("use_textline_orientation config error : %s",
-          result_use_doc_preprocessor.status().ToString().c_str());
+          result_use_textline_orientation.status().ToString().c_str());
   }
   use_textline_orientation_ = result_use_textline_orientation.value();
   if (use_textline_orientation_) {
-    auto result_textline_orientation_config =
-        config_.GetSubModule("SubModules.TextLineOrientation");
-    if (!result_textline_orientation_config.ok()) {
-      INFOE("Get textline orientation module config error :%s",
-            result_textline_orientation_config.status().ToString().c_str());
-    }
     ClasPredictorParams params;
-    params.device = params_.device.value();
-    params.precision = params_.precision.value();
-    params.enable_mkldnn = params_.enable_mkldnn.value();
+    params.device = params_.device;
+    params.precision = params_.precision;
+    params.enable_mkldnn = params_.enable_mkldnn;
+    params.mkldnn_cache_capacity = params_.mkldnn_cache_capacity;
+    params.cpu_threads = params_.cpu_threads;
     auto result_batch_size =
         config_.GetInt("TextLineOrientation.batch_size", 1);
     if (!result_batch_size.ok()) {
@@ -93,11 +92,15 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
             result_model_name.status().ToString().c_str());
       return;
     }
-    auto model_dir_text_line_orientation =
-        Utility::FindModelPath(model_dir, result_model_name.value());
-
-    textline_orientation_model_ = CreateModule<ClasPredictor>(
-        model_dir_text_line_orientation.value(), params);
+    params.model_name = result_model_name.value();
+    auto result_model_dir = config_.GetString("TextLineOrientation.model_dir");
+    if (!result_model_dir.ok()) {
+      INFOE("Could not find TextLineOrientation model dir : %s",
+            result_model_dir.status().ToString().c_str());
+      return;
+    }
+    params.model_dir = result_model_dir.value();
+    textline_orientation_model_ = CreateModule<ClasPredictor>(params);
   }
   auto text_type = config_.GetString("text_type");
   if (!text_type.ok()) {
@@ -106,9 +109,31 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
   }
   text_type_ = text_type.value();
   TextDetPredictorParams params_det;
-  params_det.device = params_.device.value();
-  params_det.precision = params_.precision.value();
-  params_det.enable_mkldnn = params_.enable_mkldnn.value();
+  auto result_text_det_model_name =
+      config_.GetString("TextDetection.model_name");
+  if (!result_text_det_model_name.ok()) {
+    INFOE("Could not find TextDetection model name : %s",
+          result_text_det_model_name.status().ToString().c_str());
+    return;
+  }
+  params_det.model_name = result_text_det_model_name.value();
+  auto result_text_det_model_dir = config_.GetString("TextDetection.model_dir");
+  if (!result_text_det_model_dir.ok()) {
+    INFOE("Could not find TextDetection model dir : %s",
+          result_text_det_model_dir.status().ToString().c_str());
+    return;
+  }
+  params_det.model_dir = result_text_det_model_dir.value();
+  auto result_det_input_shape = config_.GetString("TextDetection.input_shape");
+  if (!result_det_input_shape.value().empty()) {
+    params_det.input_shape =
+        config_.SmartParseVector(result_det_input_shape.value()).vec_int;
+  }
+  params_det.device = params_.device;
+  params_det.precision = params_.precision;
+  params_det.enable_mkldnn = params_.enable_mkldnn;
+  params_det.mkldnn_cache_capacity = params_.mkldnn_cache_capacity;
+  params_det.cpu_threads = params_.cpu_threads;
   params_det.batch_size = config_.GetInt("TextDetection.batch_size", 1).value();
   if (text_type_ == "general") {
     params_det.limit_side_len =
@@ -142,33 +167,16 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
     INFOE("Unsupported text type We %s", text_type.value().c_str());
     return;
   }
+  text_det_model_ = CreateModule<TextDetPredictor>(params_det);
 
-  text_det_params_.text_det_limit_side_len = params_det.limit_side_len;
-  text_det_params_.text_det_limit_type = params_det.limit_type;
-  text_det_params_.text_det_max_side_limit = params_det.max_side_limit;
-  text_det_params_.text_det_thresh = params_det.thresh;
-  text_det_params_.text_det_box_thresh = params_det.box_thresh;
-  text_det_params_.text_det_unclip_ratio = params_det.unclip_ratio;
-
-  auto result_text_det_model_name =
-      config_.GetString("TextDetection.model_name");
-  if (!result_text_det_model_name.ok()) {
-    INFOE("Could not find TextDetection model name : %s",
-          result_text_det_model_name.status().ToString().c_str());
-    return;
-  }
-  auto model_dir_text_det =
-      Utility::FindModelPath(model_dir, result_text_det_model_name.value());
-
-  text_det_model_ =
-      CreateModule<TextDetPredictor>(model_dir_text_det.value(), params_det);
+  text_det_params_.text_det_limit_side_len = params_det.limit_side_len.value();
+  text_det_params_.text_det_limit_type = params_det.limit_type.value();
+  text_det_params_.text_det_max_side_limit = params_det.max_side_limit.value();
+  text_det_params_.text_det_thresh = params_det.thresh.value();
+  text_det_params_.text_det_box_thresh = params_det.box_thresh.value();
+  text_det_params_.text_det_unclip_ratio = params_det.unclip_ratio.value();
 
   TextRecPredictorParams params_rec;
-  params_rec.device = params_.device.value();
-  params_rec.precision = params_.precision.value();
-  params_rec.enable_mkldnn = params_.enable_mkldnn.value();
-  params_rec.batch_size =
-      config_.GetInt("TextRecognition.batch_size", 1).value();
   auto result_text_rec_model_name =
       config_.GetString("TextRecognition.model_name");
   if (!result_text_rec_model_name.ok()) {
@@ -176,11 +184,33 @@ _OCRPipeline::_OCRPipeline(const std::string& model_dir,
           result_text_rec_model_name.status().ToString().c_str());
     return;
   }
-  auto model_dir_text_rec =
-      Utility::FindModelPath(model_dir, result_text_rec_model_name.value());
+  params_rec.model_name = result_text_rec_model_name.value();
+  auto result_text_rec_model_dir =
+      config_.GetString("TextRecognition.model_dir");
+  if (!result_text_rec_model_dir.ok()) {
+    INFOE("Could not find TextRecognition model dir : %s",
+          result_text_rec_model_dir.status().ToString().c_str());
+    return;
+  }
+  auto result_rec_input_shape =
+      config_.GetString("TextRecognition.input_shape");
+  if (!result_rec_input_shape.value().empty()) {
+    params_rec.input_shape =
+        config_.SmartParseVector(result_rec_input_shape.value()).vec_int;
+  }
+  params_rec.model_dir = result_text_rec_model_dir.value();
+  params_rec.lang = params_.lang;
+  params_rec.ocr_version = params_.ocr_version;
+  params_rec.vis_font_dir = params_.vis_font_dir;
+  params_rec.device = params_.device;
+  params_rec.precision = params_.precision;
+  params_rec.enable_mkldnn = params_.enable_mkldnn;
+  params_rec.mkldnn_cache_capacity = params_.mkldnn_cache_capacity;
+  params_rec.cpu_threads = params_.cpu_threads;
+  params_rec.batch_size =
+      config_.GetInt("TextRecognition.batch_size", 1).value();
 
-  text_rec_model_ =
-      CreateModule<TextRecPredictor>(model_dir_text_rec.value(), params_rec);
+  text_rec_model_ = CreateModule<TextRecPredictor>(params_rec);
   text_rec_score_thresh_ =
       config_.GetFloat("TextRecognition.score_thresh", 0.0).value();
 
@@ -277,13 +307,17 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
             ->PredictorResult();
     std::vector<std::vector<std::vector<cv::Point2f>>> dt_polys_list = {};
     for (auto& item : det_results) {
-      auto sort_item = sort_boxes_(item.dt_polys);
-      dt_polys_list.push_back(sort_item);
+      if (!item.dt_polys.empty()) {
+        auto sort_item = sort_boxes_(item.dt_polys);
+        dt_polys_list.push_back(sort_item);
+      } else {
+        dt_polys_list.push_back(std::vector<std::vector<cv::Point2f>>{});
+      }
     }
 
     std::vector<int> indices = {};
     for (int j = 0; j < doc_preprocessor_pipeline_images.size(); j++) {
-      if (!dt_polys_list[j].empty()) {
+      if (!dt_polys_list.empty() && !dt_polys_list[j].empty()) {
         indices.push_back(j);
       }
     }

@@ -39,6 +39,30 @@ static const char PATH_SEPARATOR = '/';
 
 class Utility {
  public:
+  struct PaddleXConfigVariant {
+    enum class Type { NONE, STR, MAP };
+    Type type;
+    std::string str_val;
+    std::unordered_map<std::string, std::string> map_val;
+    PaddleXConfigVariant() : type(Type::NONE) {}
+    PaddleXConfigVariant(const std::string& val)
+        : type(Type::STR), str_val(val) {}
+    PaddleXConfigVariant(const char* val)
+        : type(Type::STR), str_val(val ? val : "") {}
+    PaddleXConfigVariant(
+        const std::unordered_map<std::string, std::string>& val)
+        : type(Type::MAP), map_val(val) {}
+    bool IsStr() const { return type == Type::STR; }
+    bool IsMap() const { return type == Type::MAP; }
+    const std::string& GetStr() const {
+      assert(IsStr());
+      return str_val;
+    }
+    const std::unordered_map<std::string, std::string>& GetMap() const {
+      assert(IsMap());
+      return map_val;
+    }
+  };
   static constexpr const char* MODEL_FILE_PREFIX = "inference";
   static const std::set<std::string> kImgSuffixes;
 

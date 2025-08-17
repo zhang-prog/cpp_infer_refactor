@@ -17,25 +17,13 @@
 #include "result.h"
 #include "src/common/image_batch_sampler.h"
 #include "src/utils/ilogger.h"
-ClasPredictor::ClasPredictor(
-    const std::string& model_dir, const std::string& device,
-    const std::string& precision, const bool enable_mkldnn, int batch_size,
-    const std::unordered_map<std::string, std::string>& config,
 
-    const int topk)
-    : BasePredictor(model_dir, device, precision, enable_mkldnn, batch_size,
-                    config, "image"),
-      topk_(topk) {
-  Build();
-};
-
-ClasPredictor::ClasPredictor(const std::string& model_dir,
-                             const ClasPredictorParams& params)
-    : BasePredictor(model_dir, params.device, params.precision,
-                    params.enable_mkldnn, params.batch_size, params.config,
-                    "image"),
-      params_(params),
-      topk_(params.topk) {
+ClasPredictor::ClasPredictor(const ClasPredictorParams& params)
+    : BasePredictor(params.model_dir, params.model_name, params.device,
+                    params.precision, params.enable_mkldnn,
+                    params.mkldnn_cache_capacity, params.cpu_threads,
+                    params.batch_size, "image"),
+      params_(params) {
   Build();
 };
 

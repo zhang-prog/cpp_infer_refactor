@@ -16,8 +16,7 @@
 
 DEFINE_string(input, "",
               "Data to be predicted, required. Local path of an image file.");
-DEFINE_string(save_path, "./output/",
-              "Path to save inference result files.");  //******
+DEFINE_string(save_path, "./output/", "Path to save inference result files.");
 DEFINE_string(doc_orientation_classify_model_name, "",
               "Name of the document image orientation classification model.");
 DEFINE_string(
@@ -38,7 +37,7 @@ DEFINE_string(
     "Path to the text line orientation classification model directory.");
 DEFINE_string(textline_orientation_batch_size, "",
               "Batch size for the text line orientation classification model.");
-DEFINE_string(text_recognition_model_name, "PP-OCRv5_server_rec",
+DEFINE_string(text_recognition_model_name, "",
               "Name of the text recognition model.");
 DEFINE_string(text_recognition_model_dir, "",
               "Path to the text recognition model directory.");
@@ -79,14 +78,16 @@ DEFINE_string(lang, "", "Language in the input image for OCR processing.");
 DEFINE_string(ocr_version, "", "PP-OCR version to use.");
 DEFINE_string(device, "",
               "Device for inference. Supports specifying a specific card "
-              "number: gpu:0.");  //*********
-DEFINE_string(precision, "fp32",
-              "Computational precision, such as fp32, fp16.");
-DEFINE_string(enable_mkldnn, "true", "enable_mkldnn");
-DEFINE_string(mkldnn_cache_capacity, "10", "MKL-DNN cache capacity.");
-DEFINE_string(cpu_threads, "8",
+              "number: gpu:0.");
+DEFINE_string(vis_font_dir, "",
+              "When enable USE_FREETYPE, required. Path to the visualization "
+              "font, render the detected texts on images");
+DEFINE_string(precision, "", "Computational precision, such as fp32, fp16.");
+DEFINE_string(enable_mkldnn, "", "enable_mkldnn");
+DEFINE_string(mkldnn_cache_capacity, "", "MKL-DNN cache capacity.");
+DEFINE_string(cpu_threads, "",
               "Number of threads used for paddlepaddle inference on CPU.");
-DEFINE_string(threads, "1",
+DEFINE_string(threads, "",
               "Number of threads used for pipeline instance inference on CPU.");
 DEFINE_string(paddlex_config, "",
               "Path to the PaddleX pipeline configuration file.");

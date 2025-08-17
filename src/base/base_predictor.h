@@ -21,6 +21,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/types/optional.h"
 #include "base_batch_sampler.h"
 #include "base_cv_result.h"
 #include "src/common/static_infer.h"
@@ -28,19 +29,15 @@
 #include "src/utils/pp_option.h"
 #include "src/utils/yaml_config.h"
 
-#ifdef WITH_GPU
-static constexpr const char *DEVICE = "gpu:0";
-#else
-static constexpr const char *DEVICE = "cpu";
-#endif
-
 class BasePredictor {
  public:
-  BasePredictor(const std::string &model_dir, const std::string &device = "cpu",
+  BasePredictor(const absl::optional<std::string> &model_dir = absl::nullopt,
+                const absl::optional<std::string> &model_name = absl::nullopt,
+                const absl::optional<std::string> &device = absl::nullopt,
                 const std::string &precision = "fp32",
-                const bool enable_mkldnn = false, int batch_size = 1,
-                const std::unordered_map<std::string, std::string> &config = {},
-                const std::string sample_type = "");
+                const bool enable_mkldnn = true,
+                int mkldnn_cache_capacityint = 10, int cpu_threads = 8,
+                int batch_size = 1, const std::string sample_type = "");
   virtual ~BasePredictor() = default;
   std::vector<std::unique_ptr<BaseCVResult>> Predict(const std::string &input);
 
@@ -71,7 +68,7 @@ class BasePredictor {
   static const std::unordered_set<std::string> SAMPLER_TYPE;
 
  protected:
-  std::string model_dir_;
+  absl::optional<std::string> model_dir_;
   YamlConfig config_;
   int batch_size_;
   std::unique_ptr<BaseBatchSampler> batch_sampler_ptr_;

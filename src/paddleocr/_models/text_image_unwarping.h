@@ -14,13 +14,9 @@
 
 #pragma once
 
-#include "processors.h"
-#include "src/base/base_batch_sampler.h"
-#include "src/base/base_cv_result.h"
-#include "src/base/base_predictor.h"
-#include "src/common/processors.h"
+#include "src/modules/image_unwarping/predictor.h"
 
-struct WarpPredictorParams {
+struct TextImageUnwarpingParams {
   absl::optional<std::string> model_name = absl::nullopt;
   absl::optional<std::string> model_dir = absl::nullopt;
   absl::optional<std::string> device = absl::nullopt;
@@ -28,34 +24,29 @@ struct WarpPredictorParams {
   std::string precision = "fp32";
   int mkldnn_cache_capacity = 10;
   int cpu_threads = 8;
+
   int batch_size = 1;
 };
 
-struct WarpPredictorResult {
-  std::string input_path = "";
-  cv::Mat input_image;
-  cv::Mat doctr_img;
-};
-
-class WarpPredictor : public BasePredictor {
+class TextImageUnwarping {
  public:
-  explicit WarpPredictor(const WarpPredictorParams& params);
+  TextImageUnwarping(
+      const TextImageUnwarpingParams& params = TextImageUnwarpingParams());
 
-  void Build();
-
-  std::vector<std::unique_ptr<BaseCVResult>> Process(
-      std::vector<cv::Mat>& batch_data) override;
-
-  std::vector<WarpPredictorResult> PredictorResult() const {
-    return predictor_result_vec_;
+  std::vector<std::unique_ptr<BaseCVResult>> Predict(const std::string& input) {
+    std::vector<std::string> inputs = {input};
+    return Predict(inputs);
   };
+  std::vector<std::unique_ptr<BaseCVResult>> Predict(
+      const std::vector<std::string>& input);
 
-  void ResetResult() override { predictor_result_vec_.clear(); };
+  void CreateModel();
+  void OverrideConfig();
+  absl::Status CheckParams();
+  static WarpPredictorParams ToTextImageUnwarpingModelParams(
+      const TextImageUnwarpingParams& from);
 
  private:
-  std::unordered_map<std::string, std::unique_ptr<DocTrPostProcess>> post_op_;
-  std::vector<WarpPredictorResult> predictor_result_vec_;
-  std::unique_ptr<PaddleInfer> infer_ptr_;
-  WarpPredictorParams params_;
-  int input_index_ = 0;
+  TextImageUnwarpingParams params_;
+  std::unique_ptr<BasePredictor> model_infer_;
 };
