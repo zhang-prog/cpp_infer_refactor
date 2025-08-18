@@ -110,7 +110,7 @@ absl::StatusOr<std::string> Utility::GetConfigPaths(
   if (FileExists(config_path_find).ok()) {
     config_path = config_path_find;
   } else {
-    INFOE(FileExists(config_path_find).ToString().c_str());
+    return FileExists(config_path_find);
   }
   return config_path;
 };
@@ -128,97 +128,6 @@ std::string Utility::GetCpuVendor() {
   }
   return "";
 };
-
-void Utility::WriteBatchMatToTxt(const cv::Mat& batch,
-                                 const std::string& filename) {
-  // 检查维度和类型
-  if (batch.dims != 4 || batch.type() != CV_32F) {
-    INFOE("Input must be 4D CV_32F Mat.");
-    return;
-  }
-
-  const int batch_size = batch.size[0];
-  const int channels = batch.size[1];
-  const int rows = batch.size[2];
-  const int cols = batch.size[3];
-
-  std::ofstream fout(filename);
-  if (!fout.is_open()) {
-    INFOE("Cannot open file for writing: ");
-    return;
-  }
-
-  // 顺序为 NCHW
-  for (int n = 0; n < batch_size; ++n) {
-    for (int c = 0; c < channels; ++c) {
-      for (int h = 0; h < rows; ++h) {
-        // 每一行的首地址
-        const float* row_ptr = batch.ptr<float>(n, c, h);
-        for (int w = 0; w < cols; ++w) {
-          fout << row_ptr[w] << "\n";
-        }
-      }
-    }
-  }
-
-  fout.close();
-  std::cout << "Write done: " << filename << std::endl;
-}
-
-void Utility::WriteBatchMatToTxt_X(const cv::Mat& mat,
-                                   const std::string& filename) {
-  std::ofstream fout(filename);
-  if (!fout.is_open()) {
-    INFOE("Cannot open file for writing: %s ", filename.c_str());
-    return;
-  }
-
-  fout << "Dimensions: " << mat.dims << "\n";
-  for (int i = 0; i < mat.dims; ++i) {
-    fout << "Size[" << i << "]: " << mat.size[i] << "\n";
-  }
-  fout << "Type: " << mat.type() << " (depth=" << mat.depth()
-       << ", channels=" << mat.channels() << ")\n\n";
-
-  int channels = mat.channels();
-  int depth = mat.depth();
-  size_t total_elements = mat.total();  // 元素数（像素点数，不含通道）
-
-  for (size_t i = 0; i < total_elements; ++i) {
-    for (int c = 0; c < channels; ++c) {
-      switch (depth) {
-        case CV_8U:
-          fout << static_cast<int>(mat.ptr<uchar>()[i * channels + c]) << "\n";
-          break;
-        case CV_8S:
-          fout << static_cast<int>(mat.ptr<schar>()[i * channels + c]) << "\n";
-          break;
-        case CV_16U:
-          fout << mat.ptr<ushort>()[i * channels + c] << "\n";
-          break;
-        case CV_16S:
-          fout << mat.ptr<short>()[i * channels + c] << "\n";
-          break;
-        case CV_32S:
-          fout << mat.ptr<int>()[i * channels + c] << "\n";
-          break;
-        case CV_32F:
-          fout << mat.ptr<float>()[i * channels + c] << "\n";
-          break;
-        case CV_64F:
-          fout << mat.ptr<double>()[i * channels + c] << "\n";
-          break;
-        default:
-          INFOE("Unsupported mat depth: %d ", depth);
-          fout.close();
-          return;
-      }
-    }
-  }
-
-  fout.close();
-  std::cout << "Write done: " << filename << std::endl;
-}
 
 void Utility::PrintShape(const cv::Mat& img) {
   for (int i = 0; i < img.dims; i++) {

@@ -41,7 +41,7 @@ class WarpPredictor : public BasePredictor {
  public:
   explicit WarpPredictor(const WarpPredictorParams& params);
 
-  void Build();
+  absl::Status Build();
 
   std::vector<std::unique_ptr<BaseCVResult>> Process(
       std::vector<cv::Mat>& batch_data) override;

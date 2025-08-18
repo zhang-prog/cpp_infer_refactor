@@ -85,10 +85,6 @@ class Utility {
   // TODO windows
   static std::string GetCpuVendor();
 
-  static void WriteBatchMatToTxt(const cv::Mat& batch,
-                                 const std::string& filename);
-  static void WriteBatchMatToTxt_X(const cv::Mat& mat,
-                                   const std::string& filename);
   static void PrintShape(const cv::Mat& img);
 
   static absl::Status MyCreateDirectory(const std::string& path);

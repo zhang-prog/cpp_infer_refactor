@@ -25,6 +25,7 @@ TextRecognition::TextRecognition(const TextRecognitionParams& params)
   auto status = CheckParams();
   if (!status.ok()) {
     INFOE("Init TextRecognition fail : %s", status.ToString().c_str());
+    exit(-1);
   }
   CreateModel();
 };

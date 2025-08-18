@@ -29,6 +29,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
     if (!config_path.ok()) {
       INFOE("Could not find OCR pipeline config file: %s",
             config_path.status().ToString().c_str());
+      exit(-1);
     }
     config_ = YamlConfig(config_path.value());
   }
@@ -38,6 +39,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
   if (!result_use_doc_preprocessor.ok()) {
     INFOE("use_doc_preprocessor config error : %s",
           result_use_doc_preprocessor.status().ToString().c_str());
+    exit(-1);
   }
   use_doc_preprocessor_ = result_use_doc_preprocessor.value();
   if (use_doc_preprocessor_) {
@@ -45,6 +47,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
     if (!result_doc_preprocessor_config.ok()) {
       INFOE("Get doc preprocessors subpipelines config fail : ",
             result_doc_preprocessor_config.status().ToString().c_str());
+      exit(-1);
     }
     DocPreprocessorPipelineParams params;
     params.device = params_.device;
@@ -67,6 +70,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
   if (!result_use_textline_orientation.ok()) {
     INFOE("use_textline_orientation config error : %s",
           result_use_textline_orientation.status().ToString().c_str());
+    exit(-1);
   }
   use_textline_orientation_ = result_use_textline_orientation.value();
   if (use_textline_orientation_) {
@@ -81,7 +85,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
     if (!result_batch_size.ok()) {
       INFOE("Get TextLineOrientation batch size fail: %s",
             result_batch_size.status().ToString().c_str());
-      return;
+      exit(-1);
     }
     params.batch_size = result_batch_size.value();
 
@@ -90,14 +94,14 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
     if (!result_model_name.ok()) {
       INFOE("Could not find TextLineOrientation model name : %s",
             result_model_name.status().ToString().c_str());
-      return;
+      exit(-1);
     }
     params.model_name = result_model_name.value();
     auto result_model_dir = config_.GetString("TextLineOrientation.model_dir");
     if (!result_model_dir.ok()) {
       INFOE("Could not find TextLineOrientation model dir : %s",
             result_model_dir.status().ToString().c_str());
-      return;
+      exit(-1);
     }
     params.model_dir = result_model_dir.value();
     textline_orientation_model_ = CreateModule<ClasPredictor>(params);
@@ -105,7 +109,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
   auto text_type = config_.GetString("text_type");
   if (!text_type.ok()) {
     INFOE("Get text type fail : %s", text_type.status().ToString().c_str());
-    return;
+    exit(-1);
   }
   text_type_ = text_type.value();
   TextDetPredictorParams params_det;
@@ -114,14 +118,14 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
   if (!result_text_det_model_name.ok()) {
     INFOE("Could not find TextDetection model name : %s",
           result_text_det_model_name.status().ToString().c_str());
-    return;
+    exit(-1);
   }
   params_det.model_name = result_text_det_model_name.value();
   auto result_text_det_model_dir = config_.GetString("TextDetection.model_dir");
   if (!result_text_det_model_dir.ok()) {
     INFOE("Could not find TextDetection model dir : %s",
           result_text_det_model_dir.status().ToString().c_str());
-    return;
+    exit(-1);
   }
   params_det.model_dir = result_text_det_model_dir.value();
   auto result_det_input_shape = config_.GetString("TextDetection.input_shape");
@@ -165,7 +169,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
     crop_by_polys_ = std::unique_ptr<CropByPolys>(new CropByPolys("poly"));
   } else {
     INFOE("Unsupported text type We %s", text_type.value().c_str());
-    return;
+    exit(-1);
   }
   text_det_model_ = CreateModule<TextDetPredictor>(params_det);
 
@@ -182,7 +186,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
   if (!result_text_rec_model_name.ok()) {
     INFOE("Could not find TextRecognition model name : %s",
           result_text_rec_model_name.status().ToString().c_str());
-    return;
+    exit(-1);
   }
   params_rec.model_name = result_text_rec_model_name.value();
   auto result_text_rec_model_dir =
@@ -190,7 +194,7 @@ _OCRPipeline::_OCRPipeline(const OCRPipelineParams& params)
   if (!result_text_rec_model_dir.ok()) {
     INFOE("Could not find TextRecognition model dir : %s",
           result_text_rec_model_dir.status().ToString().c_str());
-    return;
+    exit(-1);
   }
   auto result_rec_input_shape =
       config_.GetString("TextRecognition.input_shape");
@@ -264,10 +268,12 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
       batch_sampler_ptr_->SampleFromVectorToStringVector(input);
   if (!batches.ok()) {
     INFOE("pipeline get sample fail : %s", batches.status().ToString().c_str());
+    exit(-1);
   }
   if (!batches_string.ok()) {
     INFOE("pipeline get sample fail : %s",
           batches_string.status().ToString().c_str());
+    exit(-1);
   }
   auto input_path = batch_sampler_ptr_->InputPath();
   int index = 0;
@@ -342,6 +348,7 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
         if (!result_all_subs_of_img.ok()) {
           INFOE("Split image fail : ",
                 result_all_subs_of_img.status().ToString().c_str());
+          exit(-1);
         }
         all_subs_of_imgs.insert(all_subs_of_imgs.end(),
                                 result_all_subs_of_img.value().begin(),
@@ -365,6 +372,7 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
         if (!result_all_subs_of_imgs.ok()) {
           INFOE("Rotate images fail : %s",
                 result_all_subs_of_imgs.status().ToString().c_str());
+          exit(-1);
         }
         all_subs_of_imgs = result_all_subs_of_imgs.value();
       } else {
@@ -405,7 +413,6 @@ std::vector<std::unique_ptr<BaseCVResult>> _OCRPipeline::Predict(
         }
         INFOW("rec infer coming");
         text_rec_model_->Predict(sorted_subs_of_img);
-        // cv::imwrite("num_1,.jpg", sorted_subs_of_img[0]);
         auto text_rec_model_results =
             static_cast<TextRecPredictor*>(text_rec_model_.get())
                 ->PredictorResult();
@@ -446,12 +453,14 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
   auto status = batch_sampler_ptr_->SetBatchSize(infer_batch_num);
   if (!status.ok()) {
     INFOE("Set batch size fail : %s", status.ToString().c_str());
+    exit(-1);
   }
   auto infer_batch_data =
       batch_sampler_ptr_->SampleFromVectorToStringVector(input);
   if (!infer_batch_data.ok()) {
     INFOE("Get infer batch data fail : %s",
           infer_batch_data.status().ToString().c_str());
+    exit(-1);
   }
   std::vector<std::unique_ptr<BaseCVResult>> results = {};
   results.reserve(input_num);
@@ -460,6 +469,7 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
         AutoParallelSimpleInferencePipeline::PredictThread(infer_data);
     if (!status.ok()) {
       INFOE("Infer fail : %s", status.ToString().c_str());
+      exit(-1);
     }
   }
   for (int i = 0; i < infer_batch_data.value().size(); i++) {
@@ -467,6 +477,7 @@ std::vector<std::unique_ptr<BaseCVResult>> OCRPipeline::Predict(
     if (!infer_data_result.ok()) {
       INFOE("Get infer result fail : %s",
             infer_batch_data.status().ToString().c_str());
+      exit(-1);
     }
     results.insert(results.end(),
                    std::make_move_iterator(infer_data_result.value().begin()),

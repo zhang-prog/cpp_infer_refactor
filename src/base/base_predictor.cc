@@ -38,14 +38,17 @@ BasePredictor::BasePredictor(const absl::optional<std::string>& model_dir,
     config_ = YamlConfig(model_dir_.value());
   } else {
     INFOE("Model dir is empty.");
+    exit(-1);
   }
   auto status_build = BuildBatchSampler();
   if (!status_build.ok()) {
     INFOE("Build sampler fail: %s", status_build.ToString().c_str());
+    exit(-1);
   }
   auto model_name_config = config_.GetString(std::string("Global.model_name"));
   if (!model_name_config.ok()) {
     INFOE(model_name_config.status().ToString().c_str());
+    exit(-1);
   }
   model_name_ = model_name_config.value();
   if (model_name.has_value()) {
@@ -54,6 +57,7 @@ BasePredictor::BasePredictor(const absl::optional<std::string>& model_dir,
           "Model name mismatch, please input the correct model dir. model dir "
           "is %s, but model name is %s",
           model_dir_.value().c_str(), model_name.value().c_str());
+      exit(-1);
     }
   }
   model_name_ = model_name.value_or(model_name_);
@@ -73,12 +77,14 @@ BasePredictor::BasePredictor(const absl::optional<std::string>& model_dir,
   auto status_device_type = pp_option_ptr_->SetDeviceType(device_type);
   if (!status_device_type.ok()) {
     INFOE("Failed to set device : %s", status_device_type.ToString().c_str());
-    return;
+    exit(-1);
+    ;
   }
   auto status_device_id = pp_option_ptr_->SetDeviceId(device_id);
   if (!status_device_id.ok()) {
     INFOE("Failed to set device id: %s", status_device_id.ToString().c_str());
-    return;
+    exit(-1);
+    ;
   }
 
   if (enable_mkldnn) {
@@ -90,7 +96,8 @@ BasePredictor::BasePredictor(const absl::optional<std::string>& model_dir,
     auto status_mkldnn = pp_option_ptr_->SetRunMode("mkldnn");
     if (!status_mkldnn.ok()) {
       INFOE("Failed to set run mode: %s", status_mkldnn.ToString().c_str());
-      return;
+      exit(-1);
+      ;
     }
   } else if (precision == "fp16") {
     if (precision == "fp16") {
@@ -98,7 +105,8 @@ BasePredictor::BasePredictor(const absl::optional<std::string>& model_dir,
       if (!status_paddle_fp16.ok()) {
         INFOE("Failed to set run mode: %s",
               status_paddle_fp16.ToString().c_str());
-        return;
+        exit(-1);
+        ;
       }
     }
   }
@@ -107,10 +115,12 @@ BasePredictor::BasePredictor(const absl::optional<std::string>& model_dir,
   if (!status_mkldnn_cache_capacityint.ok()) {
     INFOE("Set status_mkldnn_cache_capacityint fail : %s",
           status_mkldnn_cache_capacityint.ToString().c_str());
+    exit(-1);
   }
   auto status_cpu_threads = pp_option_ptr_->SetCpuThreads(cpu_threads);
   if (!status_cpu_threads.ok()) {
     INFOE("Set cpu threads fail : %s", status_cpu_threads.ToString().c_str());
+    exit(-1);
   }
   INFO(pp_option_ptr_->DebugString().c_str());
 }

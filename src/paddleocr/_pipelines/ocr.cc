@@ -24,6 +24,7 @@ PaddleOCR::PaddleOCR(const PaddleOCRParams& params) : params_(params) {
   auto status = CheckParams();
   if (!status.ok()) {
     INFOE("Init paddleOCR fail : %s", status.ToString().c_str());
+    exit(-1);
   }
   CreatePipeline();
 };

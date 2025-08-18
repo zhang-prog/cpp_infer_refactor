@@ -23,10 +23,14 @@ TextDetPredictor::TextDetPredictor(const TextDetPredictorParams& params)
                     params.mkldnn_cache_capacity, params.cpu_threads,
                     params.batch_size, "image"),
       params_(params) {
-  Build();
+  auto status = Build();
+  if (!status.ok()) {
+    INFOE("Build fail: %s", status.ToString().c_str());
+    exit(-1);
+  }
 };
 
-void TextDetPredictor::Build() {
+absl::Status TextDetPredictor::Build() {
   const auto& pre_tfs = config_.PreProcessOpInfo();
   Register<ReadImage>("Read", pre_tfs.at("DecodeImage.img_mode"));
 
@@ -60,6 +64,7 @@ void TextDetPredictor::Build() {
       std::stoi(post_params.at("PostProcess.max_candidates"));
   post_op_["DBPostProcess"] =
       std::unique_ptr<DBPostProcess>(new DBPostProcess(db_param));
+  return absl::OkStatus();
 };
 
 std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
@@ -72,6 +77,7 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   auto batch_raw_imgs = pre_op_.at("Read")->Apply(batch_data);
   if (!batch_raw_imgs.ok()) {
     INFOE(batch_raw_imgs.status().ToString().c_str());
+    exit(-1);
   }
   std::vector<int> origin_shape = {batch_raw_imgs.value()[0].rows,
                                    batch_raw_imgs.value()[0].cols};
@@ -79,22 +85,26 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   auto batch_imgs = pre_op_.at("Resize")->Apply(batch_raw_imgs.value());
   if (!batch_imgs.ok()) {
     INFOE(batch_imgs.status().ToString().c_str());
+    exit(-1);
   }
   auto batch_imgs_normalize =
       pre_op_.at("Normalize")->Apply(batch_imgs.value());
   if (!batch_imgs_normalize.ok()) {
     INFOE(batch_imgs_normalize.status().ToString().c_str());
+    exit(-1);
   }
 
   auto batch_imgs_to_chw =
       pre_op_.at("ToCHW")->Apply(batch_imgs_normalize.value());
   if (!batch_imgs_to_chw.ok()) {
     INFOE(batch_imgs_to_chw.status().ToString().c_str());
+    exit(-1);
   }
   auto batch_imgs_to_batch =
       pre_op_.at("ToBatch")->Apply(batch_imgs_to_chw.value());
   if (!batch_imgs_to_batch.ok()) {
     INFOE(batch_imgs_to_batch.status().ToString().c_str());
+    exit(-1);
   }
   for (int i = 0; i < batch_imgs_to_batch.value()[0].dims; i++) {
     std::cout << batch_imgs_to_batch.value()[0].size[i] << " ";
@@ -103,12 +113,14 @@ std::vector<std::unique_ptr<BaseCVResult>> TextDetPredictor::Process(
   auto infer_result = infer_ptr_->Apply(batch_imgs_to_batch.value());
   if (!infer_result.ok()) {
     INFOE(infer_result.status().ToString().c_str());
+    exit(-1);
   }
   auto db_result = post_op_.at("DBPostProcess")
                        ->Apply(infer_result.value()[0], origin_shape);
 
   if (!db_result.ok()) {
     INFOE(db_result.status().ToString().c_str());
+    exit(-1);
   }
 
   std::vector<std::unique_ptr<BaseCVResult>> base_cv_result_ptr_vec = {};

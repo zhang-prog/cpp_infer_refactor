@@ -55,7 +55,7 @@ class TextDetPredictor : public BasePredictor {
 
   void ResetResult() override { predictor_result_vec_.clear(); };
 
-  void Build();
+  absl::Status Build();
 
   std::vector<std::unique_ptr<BaseCVResult>> Process(
       std::vector<cv::Mat> &batch_data) override;

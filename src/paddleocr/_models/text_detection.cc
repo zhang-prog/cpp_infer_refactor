@@ -25,6 +25,7 @@ TextDetection::TextDetection(const TextDetectionParams& params)
   auto status = CheckParams();
   if (!status.ok()) {
     INFOE("Init TextDetection fail : %s", status.ToString().c_str());
+    exit(-1);
   }
   CreateModel();
 };

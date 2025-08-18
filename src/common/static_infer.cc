@@ -31,7 +31,7 @@ PaddleInfer::PaddleInfer(const std::string &model_name,
   auto result = Create();
   if (!result.ok()) {
     INFOE("Create predictor failed: %s", result.status().ToString().c_str());
-    return;
+    exit(-1);
   }
 
   predictor_ = std::move(result.value());
@@ -150,6 +150,7 @@ absl::StatusOr<std::vector<cv::Mat>> PaddleInfer::Apply(
     predictor_->Run();
   } catch (const std::exception &e) {
     INFOE("static Infer fail: %s", e.what());
+    exit(-1);
   }
 
   std::vector<std::vector<float>> outputs;
@@ -191,6 +192,7 @@ absl::Status PaddleInfer::CheckRunMode() {
       INFOE(
           "Now, the `LaTeX_OCR_rec` model only support `mkldnn` mode when "
           "running on Intel CPU devices. So using `mkldnn` instead.");
+      exit(-1);
       auto result = option_.SetRunMode("mkldnn");
       if (!result.ok()) {
         return result;

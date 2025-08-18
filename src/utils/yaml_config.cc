@@ -25,10 +25,12 @@ YamlConfig::YamlConfig(const std::string& model_dir) {
   if (!status_get.ok()) {
     INFOE("Could find files with the .yaml or .yml in %s %s", model_dir.c_str(),
           status_get.ToString().c_str());
+    exit(-1);
   }
   auto status = LoadYamlFile();
   if (!status.ok()) {
     INFOE("Failed to load config: ", status.ToString().c_str());
+    exit(-1);
   }
   Init();
 }

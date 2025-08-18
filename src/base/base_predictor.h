@@ -93,6 +93,7 @@ std::vector<std::unique_ptr<BaseCVResult>> BasePredictor::Predict(
   auto batches = batch_sampler_ptr_->Apply(input);
   if (!batches.ok()) {
     INFOE("Get sample fail : %s", batches.status().ToString().c_str());
+    exit(-1);
   }
   input_path_ = batch_sampler_ptr_->InputPath();
   for (auto &batch_data : batches.value()) {

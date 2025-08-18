@@ -25,6 +25,7 @@ TextImageUnwarping::TextImageUnwarping(const TextImageUnwarpingParams& params)
   auto status = CheckParams();
   if (!status.ok()) {
     INFOE("Init TextImageUnwarping fail : %s", status.ToString().c_str());
+    exit(-1);
   }
   CreateModel();
 };

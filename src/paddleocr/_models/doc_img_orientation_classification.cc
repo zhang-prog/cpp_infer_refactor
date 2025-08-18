@@ -27,6 +27,7 @@ DocImgOrientationClassification::DocImgOrientationClassification(
   if (!status.ok()) {
     INFOE("Init DocImgOrientationClassification fail : %s",
           status.ToString().c_str());
+    exit(-1);
   }
   CreateModel();
 };

@@ -25,6 +25,7 @@ DocPreprocessor::DocPreprocessor(const DocPreprocessorParams& params)
   auto status = CheckParams();
   if (!status.ok()) {
     INFOE("Init DocPreprocessor fail : %s", status.ToString().c_str());
+    exit(-1);
   }
   CreatePipeline();
 };

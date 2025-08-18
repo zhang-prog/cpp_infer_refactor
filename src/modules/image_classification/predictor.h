@@ -45,7 +45,7 @@ class ClasPredictor : public BasePredictor {
 
   ClasPredictor() = delete;
 
-  void Build();
+  absl::Status Build();
 
   std::vector<std::unique_ptr<BaseCVResult>> Process(
       std::vector<cv::Mat>& batch_data) override;

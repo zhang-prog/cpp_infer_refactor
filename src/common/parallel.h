@@ -72,6 +72,7 @@ AutoParallelSimpleInferencePipeline<Pipeline, PipelineParams, PipelineInput,
   auto status = Init();
   if (!status.ok()) {
     INFOE("Pipeline pool init error : %s", status.ToString().c_str());
+    exit(-1);
   }
 }
 

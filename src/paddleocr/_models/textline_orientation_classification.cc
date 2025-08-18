@@ -27,6 +27,7 @@ TextLineOrientationClassification::TextLineOrientationClassification(
   if (!status.ok()) {
     INFOE("Init TextLineOrientationClassification fail : %s",
           status.ToString().c_str());
+    exit(-1);
   }
   CreateModel();
 };

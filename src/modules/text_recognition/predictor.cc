@@ -30,10 +30,14 @@ TextRecPredictor::TextRecPredictor(const TextRecPredictorParams& params)
     INFOE("Rec model params is invaild : %s", status.ToString().c_str());
     std::exit(-1);
   }
-  Build();
+  auto status_build = Build();
+  if (!status_build.ok()) {
+    INFOE("Build fail: %s", status_build.ToString().c_str());
+    exit(-1);
+  }
 };
 
-void TextRecPredictor::Build() {
+absl::Status TextRecPredictor::Build() {
   const auto& pre_params = config_.PreProcessOpInfo();
   Register<ReadImage>("Read", "BGR");  //******
   Register<OCRReisizeNormImg>("ReisizeNorm", params_.input_shape);
@@ -44,6 +48,7 @@ void TextRecPredictor::Build() {
       new CTCLabelDecode(YamlConfig::SmartParseVector(
                              post_params.at("PostProcess.character_dict"))
                              .vec_string));
+  return absl::OkStatus();
 };
 
 std::vector<std::unique_ptr<BaseCVResult>> TextRecPredictor::Process(
@@ -56,20 +61,24 @@ std::vector<std::unique_ptr<BaseCVResult>> TextRecPredictor::Process(
   auto batch_read = pre_op_.at("Read")->Apply(batch_data);
   if (!batch_read.ok()) {
     INFOE(batch_read.status().ToString().c_str());
+    exit(-1);
   }
 
   auto batch_resize_norm = pre_op_.at("ReisizeNorm")->Apply(batch_read.value());
   if (!batch_resize_norm.ok()) {
     INFOE(batch_resize_norm.status().ToString().c_str());
+    exit(-1);
   }
 
   auto batch_tobatch = pre_op_.at("ToBatch")->Apply(batch_resize_norm.value());
   if (!batch_tobatch.ok()) {
     INFOE(batch_tobatch.status().ToString().c_str());
+    exit(-1);
   }
   auto batch_infer = infer_ptr_->Apply(batch_tobatch.value());
   if (!batch_infer.ok()) {
     INFOE(batch_infer.status().ToString().c_str());
+    exit(-1);
   }
 
   auto ctc_result =
@@ -77,6 +86,7 @@ std::vector<std::unique_ptr<BaseCVResult>> TextRecPredictor::Process(
 
   if (!ctc_result.ok()) {
     INFOE(ctc_result.status().ToString().c_str());
+    exit(-1);
   }
 
   std::vector<std::unique_ptr<BaseCVResult>> base_cv_result_ptr_vec = {};
@@ -106,8 +116,8 @@ absl::Status TextRecPredictor::CheckRecModelParams() {
   }
   auto result_model_name = ModelName();
   if (!result_model_name.ok()) {
-    INFOE("Get model name fail : %s",
-          result_model_name.status().ToString().c_str());
+    return absl::InternalError("Get model name fail : " +
+                               result_model_name.status().ToString());
   }
   size_t pos_model_name = result_model_name.value().find('_');
   size_t pos_model_check = std::get<1>(result_models_check.value()).find('_');
@@ -136,8 +146,9 @@ absl::Status TextRecPredictor::CheckRecModelParams() {
     size_t pos = params_.vis_font_dir.value().find_last_of("/\\");
     std::string filename = params_.vis_font_dir.value().substr(pos + 1);
     if (filename != std::get<2>(result_models_check.value())) {
-      INFOE("Expected visualization font is %s, but get is %s",
-            std::get<2>(result_models_check.value()).c_str(), filename.c_str());
+      return absl::NotFoundError("Expected visualization font is " +
+                                 std::get<2>(result_models_check.value()) +
+                                 ", but get is " + filename);
     }
   }
 #endif
